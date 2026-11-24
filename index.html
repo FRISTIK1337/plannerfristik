@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#141329" />
+<meta name="description" content="fristik.planner — расписание, статистика и коллекция аниме-героев." />
+<title>fristik.planner — anime planner & collection</title>
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><div class="logo"><img src="assets/images/embedded/embedded-01.webp" alt="Goku mascot" /></div><div><h1>fristik.planner</h1><p>Прокачивай себя. День за днём.</p></div></div>
+    <div class="top-actions">
+      <div class="wallet-pill" aria-label="Баланс монет"><span>🪙</span><b id="coinBalance">0</b><small>монет</small></div>
+      <button class="btn" id="exportBtn" title="Скачать резервную копию">↧ Экспорт</button>
+      <button class="btn" id="importBtn" title="Загрузить резервную копию">↥ Импорт</button>
+      <button class="btn primary" id="addBtn">＋ Добавить дело</button>
+      <input type="file" id="importFile" accept="application/json,.json" class="hidden" />
+    </div>
+  </header>
+
+  <nav class="main-nav" aria-label="Разделы планера">
+    <button type="button" class="main-nav-btn active" data-page="schedule">▦ Расписание</button>
+    <button type="button" class="main-nav-btn" data-page="stats">◈ Статистика</button>
+    <button type="button" class="main-nav-btn" data-page="collection">✦ Коллекция</button>
+    <button type="button" class="main-nav-btn" data-page="shop">🛒 Магазин</button>
+  </nav>
+
+  <section class="motivation-strip panel" aria-live="polite">
+    <div class="motivation-kicker"><span class="motivation-orb">✦</span><span>ЕЖЕДНЕВНЫЙ НАСТРОЙ</span><span class="anime-tag">ANIME MODE</span></div>
+    <div class="motivation-body"><p id="dailyQuote">Сила появляется не в один момент — она собирается из повторений.</p><small id="quoteSource">fristik.planner · мысль дня</small></div>
+    <button class="btn small quote-next" id="newQuoteBtn" type="button">↻ Другая цитата</button>
+  </section>
+
+  <main id="schedulePage" class="page">
+  <section class="toolbar panel">
+    <div class="week-control">
+      <button class="btn icon" id="prevWeek" aria-label="Предыдущая неделя">‹</button>
+      <div class="week-title"><strong id="weekTitle">Эта неделя</strong><span id="weekSubtitle">План на 7 дней</span></div>
+      <button class="btn icon" id="nextWeek" aria-label="Следующая неделя">›</button>
+    </div>
+    <div class="toolbar-right"><button class="btn today-btn" id="todayBtn">Сегодня</button></div>
+  </section>
+
+  <section class="progress-overview">
+    <div class="level-card panel">
+      <div class="level-top">
+        <div><span class="eyebrow">ТВОЙ ПРОГРЕСС</span><h2>Ты растёшь каждый день</h2><p id="levelCaption">Выполняй дела и получай опыт</p></div>
+        <div class="level-badge"><span>LVL</span><strong id="levelNumber">1</strong></div>
+      </div>
+      <div class="xp-track"><div class="xp-fill" id="levelProgressFill"></div></div>
+      <div class="level-bottom"><span id="levelXpText">0 / 100 XP</span><span id="totalXpText">Всего 0 XP</span></div>
+      <div class="achievement-pill" id="achievementLabel">🌱 Начало пути</div><div class="rank-row"><span class="rank-title" id="currentTitle">Новичок</span><span class="rank-next" id="nextTitle">Следующий титул: Ученик · ур. 2</span></div>
+    </div>
+    <div class="quick-stats">
+      <div class="quick-stat panel"><span class="stat-icon">✅</span><span class="stat-label">ВЫПОЛНЕНО ЗА НЕДЕЛЮ</span><strong id="weekDoneCount">0 / 0</strong><small id="weekDoneHint">Пока всё впереди</small></div>
+      <div class="quick-stat panel"><span class="stat-icon">🎯</span><span class="stat-label">ПРОГРЕСС НЕДЕЛИ</span><strong id="weekPercent">0%</strong><small>От всех запланированных дел</small></div>
+      <div class="quick-stat panel"><span class="stat-icon">🔥</span><span class="stat-label">СЕРИЯ ДНЕЙ</span><strong id="streakCount">0 дней</strong><small>Дни подряд с развивающими делами</small></div>
+      <div class="quick-stat panel"><span class="stat-icon">🏆</span><span class="stat-label">ВСЕГО ВЫПОЛНЕНО</span><strong id="allDoneCount">0</strong><small id="weekXpText">+0 XP на этой неделе</small></div>
+    </div>
+  </section>
+
+  <section class="categories panel">
+    <span class="categories-label">МОИ КАТЕГОРИИ</span>
+    <div id="categoryChips" style="display:contents"></div>
+    <div class="cat-tools"><button class="btn small" id="manageCatsBtn">⚙ Категории</button></div>
+  </section>
+
+  <nav class="mobile-day-picker" id="mobileDays" aria-label="Выбрать день"></nav>
+
+  <section class="calendar-panel panel">
+    <div class="calendar-scroll" id="calendarScroll">
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+    <div class="empty-hint" id="emptyHint">Пока нет запланированных дел. Нажми на свободный час или «Добавить дело».</div>
+  </section>
+
+  <section class="task-area">
+    <div class="task-list-panel panel">
+      <div class="section-heading"><div><span class="eyebrow">НЕ ДАЙ ПЛАНАМ ОСТАТЬСЯ ПЛАНАМИ</span><h2>Задачи недели</h2><p id="taskSummary">0 из 0 выполнено</p></div><span class="task-total-badge" id="taskTotalBadge">0 дел</span></div>
+      <div class="task-filters" role="group" aria-label="Фильтр задач">
+        <button type="button" class="filter-btn active" data-task-filter="all">Все</button>
+        <button type="button" class="filter-btn" data-task-filter="open">В планах</button>
+        <button type="button" class="filter-btn" data-task-filter="done">Сделано</button>
+        <button type="button" class="filter-btn" data-task-filter="failed">Не выполнено</button>
+      </div>
+      <div class="task-list" id="taskList"><div class="task-empty">Добавь первое дело в расписание — здесь появится твой список задач ✨</div></div>
+    </div>
+    <aside class="category-stats-panel panel">
+      <div class="section-heading compact"><div><span class="eyebrow">БАЛАНС НЕДЕЛИ</span><h2>По направлениям</h2></div></div>
+      <div id="categoryProgress" class="category-progress"><div class="task-empty">Пока нет статистики</div></div>
+      <div class="xp-tip"><span>💡</span><p>XP начисляется только за развивающие дела. Сон, еда и отдых важны, но не должны превращаться в гонку за баллами.</p></div>
+    </aside>
+  </section>
+
+  <footer class="footer-stats panel">
+    <div class="stats"><span><b id="eventCount">0</b> дел на неделе</span><span><b id="plannedHours">0 ч</b> запланировано</span><span><b id="freeDays">7</b> свободных дней</span></div>
+    <div class="save-state"><i class="save-dot"></i><span id="saveStateText">Автосохранение на этом устройстве</span></div>
+  </footer>
+  </main>
+
+  <main id="statsPage" class="page hidden">
+    <section class="stats-page-heading">
+      <div><span class="eyebrow">ТВОЯ ДИНАМИКА</span><h2>Статистика развития</h2><p>Смотри, как усилия превращаются в результат.</p></div>
+      <div class="stats-range" role="group" aria-label="Период статистики">
+        <button type="button" class="range-btn" data-range="7">7 дней</button>
+        <button type="button" class="range-btn active" data-range="30">30 дней</button>
+        <button type="button" class="range-btn" data-range="90">90 дней</button>
+        <button type="button" class="range-btn" data-range="all">Всё время</button>
+      </div>
+    </section>
+
+    <section class="stats-level panel">
+      <div class="stats-level-badge"><span>LVL</span><b id="statsLevelNum">1</b></div>
+      <div class="stats-level-main"><div class="stats-level-head"><strong>Твой уровень развития</strong><span id="statsLevelAllXP">0 XP всего</span></div><div class="stats-level-track"><i id="statsLevelFill"></i></div><small id="statsLevelNext">До следующего уровня — 100 XP</small><div class="stats-rank-line">Твой титул: <b id="statsCurrentTitle">Новичок</b></div></div>
+    </section>
+
+    <section class="stats-kpis">
+      <article class="stats-kpi panel"><span>⚡ XP заработано</span><strong id="statXP">0</strong><small id="statXPNote">За выбранный период</small></article>
+      <article class="stats-kpi panel"><span>✅ Выполнено задач</span><strong id="statDone">0</strong><small id="statDoneNote">Из запланированных</small></article>
+      <article class="stats-kpi panel"><span>🎯 Выполнение</span><strong id="statRate">0%</strong><small>Доля закрытых задач</small></article>
+      <article class="stats-kpi panel"><span>⌛ Время на развитие</span><strong id="statHours">0 ч</strong><small>Работа, учёба, спорт и проекты</small></article>
+      <article class="stats-kpi panel"><span>✕ Не выполнено</span><strong id="statFailed">0</strong><small>Задачи со статусом пропуска</small></article>
+      <article class="stats-kpi panel"><span>⚖ Штраф XP</span><strong id="statPenalty">0</strong><small>Списано за важные пропуски</small></article>
+    </section>
+
+    <section class="stats-grid">
+      <article class="panel stats-panel trend-panel">
+        <div class="section-heading"><div><span class="eyebrow">НЕ ТОЛЬКО ОЩУЩЕНИЯ</span><h2>Динамика опыта</h2><p id="trendCaption">XP за последние 14 дней</p></div><span class="panel-icon">📈</span></div>
+        <div id="xpTrendBars" class="xp-trend-bars"><div class="task-empty">Пока нет начисленного опыта</div></div>
+        <div class="trend-legend"><span><i></i> XP за день</span><b id="trendTotal">0 XP за 14 дней</b></div>
+      </article>
+      <article class="panel stats-panel goals-panel">
+        <div class="section-heading"><div><span class="eyebrow">ТВОЙ ОРИЕНТИР</span><h2>Цели продуктивности</h2><p>Меняй нормы под свой ритм жизни.</p></div><span class="panel-icon">🏁</span></div>
+        <div class="goal-block"><div class="goal-label"><span>Сегодня</span><b id="dailyGoalText">0 / 2</b></div><div class="goal-track"><i id="dailyGoalFill"></i></div><small>Выполненные развивающие задачи</small></div>
+        <div class="goal-block"><div class="goal-label"><span>Эта неделя</span><b id="weeklyGoalText">0 / 10</b></div><div class="goal-track"><i id="weeklyGoalFill"></i></div><small>Работа, обучение, спорт, проекты и другое</small></div>
+        <div class="goal-settings">
+          <label>Цель на день <input id="dailyGoalInput" type="number" min="0" max="30" value="2"></label>
+          <label>Цель на неделю <input id="weeklyGoalInput" type="number" min="0" max="100" value="10"></label>
+        </div>
+        <p class="soft-note">Цели — ориентир, а не наказание. Пропуск дня не отнимает XP.</p>
+      </article>
+    </section>
+
+    <section class="stats-grid">
+      <article class="panel stats-panel heatmap-panel">
+        <div class="section-heading"><div><span class="eyebrow">ПОСЛЕДНИЕ 35 ДНЕЙ</span><h2>Карта активности</h2><p>Каждая клетка — день, когда ты сделал шаг вперёд.</p></div><span class="panel-icon">🗓️</span></div>
+        <div id="activityHeatmap" class="activity-heatmap"><div class="task-empty">Здесь появится твоя активность</div></div>
+        <div class="heatmap-legend"><span>Меньше</span><i class="heat-0"></i><i class="heat-1"></i><i class="heat-2"></i><i class="heat-3"></i><i class="heat-4"></i><span>Больше</span></div>
+      </article>
+      <article class="panel stats-panel records-panel">
+        <div class="section-heading"><div><span class="eyebrow">ТВОИ РЕКОРДЫ</span><h2>Стабильность</h2><p>Считаем только развивающие действия.</p></div><span class="panel-icon">🔥</span></div>
+        <div class="record-grid">
+          <div class="record-box"><span>Текущая серия</span><strong id="currentStreak">0 дней</strong></div>
+          <div class="record-box"><span>Лучшая серия</span><strong id="bestStreak">0 дней</strong></div>
+          <div class="record-box"><span>Лучший день</span><strong id="bestDay">—</strong></div>
+          <div class="record-box"><span>Развивающих задач</span><strong id="productiveDone">0</strong></div>
+        </div>
+        <div class="record-insight" id="recordInsight">Начни с одного важного дела — и здесь появится твой первый рекорд.</div>
+      </article>
+    </section>
+
+    <section class="stats-grid stats-bottom">
+      <article class="panel stats-panel">
+        <div class="section-heading"><div><span class="eyebrow">КУДА УХОДИТ ТВОЯ ЭНЕРГИЯ</span><h2>Результат по направлениям</h2><p>Выполнено задач и заработано XP.</p></div></div>
+        <div id="statsCategoryList" class="stats-category-list"><div class="task-empty">Пока нет данных</div></div>
+      </article>
+      <article class="panel stats-panel">
+        <div class="section-heading"><div><span class="eyebrow">НЕ ЗАБЫВАЙ СВОИ ПОБЕДЫ</span><h2>Недавние выполнения</h2><p>Последние отмеченные дела.</p></div></div>
+        <div id="statsHistory" class="stats-history"><div class="task-empty">История пока пуста</div></div>
+      </article>
+    </section>
+
+    <section class="anime-corner-grid">
+      <article class="panel anime-card dragon-card">
+        <div class="anime-card-head"><span class="anime-kicker">DRAGON BALL · КОЛЛЕКЦИЯ</span><span class="anime-emoji">🐉</span></div>
+        <h3>Собери 7 сфер</h3><p>Каждые 100 чистых XP открывают одну сферу. Дойди до семи — и станешь легендой своего пути.</p>
+        <div class="dragon-balls" id="dragonBalls" aria-label="Семь сфер прогресса"></div>
+        <small class="anime-progress-note" id="dragonBallsNote">0 / 7 сфер · начни собирать энергию</small>
+      </article>
+      <article class="panel anime-card grand-card">
+        <div class="anime-card-head"><span class="anime-kicker">ONE PIECE · GRAND LINE</span><span class="anime-emoji">☠️</span></div>
+        <h3>Курс на свою мечту</h3><p>Большая цель не берётся за один день. Каждый важный шаг приближает тебя к собственному сокровищу.</p>
+        <div class="grand-progress"><i id="grandLineFill"></i></div>
+        <div class="grand-progress-label"><b id="grandLineText">0 / 1000 XP</b><span>Путь к Гранд-Лайну</span></div>
+        <div class="anime-mini-stats"><span>🥷 Шиноби-серия: <b id="shinobiStreak">0 дн.</b></span><span>⚡ Чистый баланс: <b id="animeNetXP">0 XP</b></span></div>
+      </article>
+    </section>
+
+    <section class="panel stats-panel achievements-panel">
+      <div class="section-heading"><div><span class="eyebrow">МАЛЕНЬКИЕ ПОБЕДЫ — БОЛЬШОЙ ПУТЬ</span><h2>Достижения</h2><p>Открывай их за реальные действия. Никаких штрафов за отдых.</p></div><span class="task-total-badge" id="achievementCount">0 / 6 открыто</span></div>
+      <div id="achievementsGrid" class="achievements-grid"></div>
+    </section>
+
+    <div class="stats-footer-note">💜 Сон, еда, отдых и другие базовые потребности остаются важной частью расписания, но не дают XP. Здесь награждаются действия, которые развивают твои навыки, здоровье, работу и личные проекты.</div>
+    <section class="economy-stats panel"><div class="section-heading"><div><span class="eyebrow">FRISTIK ECONOMY</span><h2>Твоя игровая экономика</h2><p>Монеты, покупки и собранные карточки.</p></div><span class="panel-icon">🪙</span></div><div class="economy-stats-grid" id="economyStatsSummary"></div><button class="btn small" type="button" data-page="shop">Открыть магазин ↗</button></section>
+  </main>
+
+  <main id="collectionPage" class="page hidden">
+    <section class="collection-page-heading">
+      <div><span class="eyebrow">ANIME ARCHIVE · ТВОЯ КОМАНДА</span><h2>Коллекция героев</h2><p>Открывай персонажей за уровни, достижения и реальные усилия.</p></div>
+      <div class="collection-tally panel"><strong id="collectionUnlockedCount">1 / 11</strong><span>героев открыто</span></div>
+    </section>
+
+    <section class="collection-spotlight panel">
+      <div class="collection-spotlight-copy">
+        <span class="eyebrow">ТВОЙ АКТИВНЫЙ ГЕРОЙ</span>
+        <h3 id="activeHeroName">Сон Гоку</h3>
+        <p id="activeHeroQuote">Твой путь начинается с первого шага.</p>
+        <div class="active-hero-meta"><span id="activeHeroAnime">DRAGON BALL</span><span id="activeHeroRarity" class="rarity-pill rarity-common">ОБЫЧНЫЙ</span></div>
+        <button class="btn small" id="activeHeroDetails" type="button">Карточка персонажа ↗</button>
+      </div>
+      <div class="collection-spotlight-art" id="activeHeroArt"><span class="spotlight-aura"></span><img alt="Активный герой" /></div>
+      <div class="collection-spotlight-progress">
+        <div class="collection-progress-top"><span>ПРОГРЕСС КОЛЛЕКЦИИ</span><b id="collectionProgressLabel">1 из 11</b></div>
+        <div class="collection-progress-track"><i id="collectionProgressFill"></i></div>
+        <small id="collectionNextUnlock">Следующий герой уже где-то на пути…</small>
+      </div>
+    </section>
+
+    <section class="collection-toolbar panel">
+      <div class="collection-filter-group" role="group" aria-label="Фильтр коллекции">
+        <button class="collection-filter active" data-collection-filter="all" type="button">Все <span id="collectionAllCount">9</span></button>
+        <button class="collection-filter" data-collection-filter="unlocked" type="button">Открытые <span id="collectionOpenCount">1</span></button>
+        <button class="collection-filter" data-collection-filter="locked" type="button">Закрытые <span id="collectionLockedCount">8</span></button>
+      </div>
+      <div class="collection-hint">🔓 Условия можно посмотреть в карточке героя</div>
+    </section>
+
+    <div class="collection-grid" id="collectionGrid" aria-live="polite"></div>
+    <div class="collection-footer-note panel">💡 Герои открываются навсегда. Выполняй важные дела, прокачивай уровень и собирай команду. Сон и отдых в зачёт не идут — восстановление тоже часть пути.</div>
+    <section class="forms-section panel">
+      <div class="section-heading"><div><span class="eyebrow">POWER UPS · STANDS · AWAKENINGS</span><h2>Трансформации и стенды</h2><p>Открывай новые формы героев. Выбранный скин появится в профиле.</p></div><span class="forms-count" id="formsCount">0 / 15</span></div>
+      <div class="forms-toolbar"><div class="shop-tabs" id="formFilters"><button type="button" class="shop-tab active" data-form-filter="all">Все формы</button><button type="button" class="shop-tab" data-form-filter="unlocked">Открытые</button><button type="button" class="shop-tab" data-form-filter="locked">Закрытые</button></div><button class="btn small" type="button" data-base-form>↺ Базовый вид</button></div>
+      <div class="forms-grid" id="formsGrid"></div>
+    </section>
+  </main>
+  <main id="shopPage" class="page hidden">
+    <section class="shop-heading">
+      <div><span class="eyebrow">FRISTIK MARKET · EARNED, NOT BOUGHT</span><h2>Магазин и кейсы</h2><p>Получай монеты за важные дела, открывай карточки и собирай аниме-альбом.</p></div>
+      <div class="shop-wallet panel"><div><span>ТВОЙ БАЛАНС</span><strong><b id="shopCoinBalance">0</b> 🪙</strong></div><div><span>ОСКОЛКИ</span><strong><b id="shopShardBalance">0</b> 💎</strong></div></div>
+    </section>
+    <section class="economy-info panel"><div class="economy-info-icon">⚡</div><div><b>Монеты за реальные шаги</b><p>Работа, учёба, тренировки и другие важные задачи приносят монеты один раз за выполнение. Сон, еда и отдых не дают монет. Никаких реальных платежей — только игровая валюта.</p><div class="coin-rate-line"><span>Работа +24</span><span>Учёба +18</span><span>Тренировка +14</span><span>Уборка +10</span></div></div></section>
+    <div class="shop-tabs main-shop-tabs" role="tablist"><button class="shop-tab active" data-shop-tab="cases" type="button">🎁 Кейсы</button><button class="shop-tab" data-shop-tab="market" type="button">🛍️ Предметы</button><button class="shop-tab" data-shop-tab="cards" type="button">🃏 Мои карточки</button></div>
+    <section id="shopCasesView" class="shop-view">
+      <div class="section-heading"><div><h2>Выбери кейс</h2><p>У каждого кейса свои шансы и набор наград.</p></div><span class="pity-chip" id="pityText">Гарантия эпика через 10 безуспешных открытий</span></div>
+      <div class="case-grid" id="caseGrid"></div>
+      <div class="odds-panel panel"><div class="section-heading compact"><div><h3>Прозрачные шансы выпадения</h3><p>Вероятности показываются до открытия.</p></div></div><div class="odds-grid" id="oddsGrid"></div><p class="muted-note">Повторная карточка конвертируется в осколки: обычная +5, редкая +10, эпическая +25, легендарная +50. После 10 открытий без эпической или легендарной карточки следующая карточка будет минимум эпической.</p></div>
+    </section>
+    <section id="shopMarketView" class="shop-view hidden"><div class="section-heading"><div><h2>Витрина</h2><p>Косметические предметы для оформления профиля. Они не дают игрового преимущества.</p></div></div><div class="market-grid" id="marketGrid"></div><div class="craft-panel panel"><div><span class="eyebrow">ОБМЕН ОСКОЛКОВ</span><h3>Создай карточку гарантированно</h3><p>Копи осколки от повторов и выбирай редкость без случайности.</p></div><div class="craft-actions"><button class="btn small" data-craft="rare">Редкая · 60 💎</button><button class="btn small" data-craft="epic">Эпическая · 140 💎</button><button class="btn small" data-craft="legendary">Легендарная · 300 💎</button></div></div></section>
+    <section id="shopCardsView" class="shop-view hidden"><div class="section-heading"><div><h2>Аниме-альбом</h2><p>Карточки, которые выпали из кейсов или были созданы за осколки.</p></div><span class="forms-count" id="cardsCount">0 / 0</span></div><div class="card-album-grid" id="cardAlbumGrid"></div></section>
+  </main>
+</div>
+
+<!-- Add/edit event modal -->
+<div class="modal-backdrop" id="eventModal" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
+  <div class="modal">
+    <div class="modal-head"><h2 id="eventModalTitle">Новое дело</h2><button class="close" data-close="eventModal" aria-label="Закрыть">×</button></div>
+    <form id="eventForm">
+      <div class="form-grid">
+        <div class="field full"><label for="eventTitle">Название занятия</label><input id="eventTitle" maxlength="70" placeholder="Например, работа над проектом" required /></div>
+        <div class="field"><label for="eventDate">День начала</label><input id="eventDate" type="date" required /></div>
+        <div class="field"><label for="eventEndDate">День окончания</label><input id="eventEndDate" type="date" required /></div>
+        <div class="field"><label for="eventStart">Время начала</label><input id="eventStart" type="time" value="09:00" required /></div>
+        <div class="field"><label for="eventEnd">Время окончания</label><input id="eventEnd" type="time" value="10:00" required /></div>
+        <div class="field full"><p class="field-hint">Можно заканчивать на следующий день или позже. Например: четверг 18:00 → пятница 05:00.</p></div>
+        <div class="field full"><label for="eventCategory">Категория</label><select id="eventCategory"></select></div>
+        <div class="field full"><label for="eventNotes">Заметка (необязательно)</label><textarea id="eventNotes" maxlength="220" placeholder="Что нужно сделать, что взять с собой…"></textarea></div>
+      </div>
+      <div class="modal-actions"><button class="btn" type="button" id="deleteEventBtn" style="color:#ff929f">Удалить</button><div class="right-actions"><button class="btn" type="button" data-close="eventModal">Отмена</button><button class="btn primary" type="submit">Сохранить</button></div></div>
+    </form>
+  </div>
+</div>
+
+<!-- Category manager -->
+<div class="modal-backdrop" id="categoryModal" role="dialog" aria-modal="true" aria-labelledby="categoryModalTitle">
+  <div class="modal">
+    <div class="modal-head"><h2 id="categoryModalTitle">Мои категории</h2><button class="close" data-close="categoryModal" aria-label="Закрыть">×</button></div>
+    <p class="manage-note">Опыт начисляется за развитие: работу, учёбу, спорт и важные проекты. Для сна, еды, отдыха и базовых потребностей оставляй 0 XP. Новые категории изначально не дают опыта.</p>
+    <div class="form-grid"><div class="field"><label for="newCategoryName">Название</label><input id="newCategoryName" maxlength="24" placeholder="Например, Хобби" /></div><div class="field"><label for="newCategoryColor">Цвет</label><input id="newCategoryColor" type="color" value="#8e7cf6" style="height:42px;padding:4px" /></div></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn primary" id="addCategoryBtn" type="button">＋ Добавить категорию</button></div>
+    <div class="category-list" id="categoryList"></div>
+    <div class="modal-actions"><span class="manage-note" style="align-self:center">Изменения сохраняются автоматически</span><div class="right-actions"><button class="btn" data-close="categoryModal">Готово</button></div></div>
+  </div>
+</div>
+<!-- Character details -->
+<div class="modal-backdrop" id="characterModal" role="dialog" aria-modal="true" aria-labelledby="characterModalTitle">
+  <div class="modal character-modal"><div class="modal-head"><h2 id="characterModalTitle">Карточка персонажа</h2><button class="close" data-close="characterModal" aria-label="Закрыть">×</button></div><div id="characterDetail"></div></div>
+</div>
+<!-- Character unlocked celebration -->
+<div class="modal-backdrop unlock-backdrop" id="unlockModal" role="dialog" aria-modal="true" aria-labelledby="unlockModalTitle">
+  <div class="unlock-modal"><div class="unlock-sparkles">✦　✧　✦　✧　✦</div><div id="unlockModalContent"></div><div class="unlock-actions"><button class="btn" data-close="unlockModal" type="button">Позже</button><button class="btn primary" id="unlockChooseBtn" type="button">Выбрать героя</button></div></div>
+</div>
+<div class="modal-backdrop case-backdrop" id="caseModal" role="dialog" aria-modal="true" aria-labelledby="caseModalTitle">
+  <div class="case-modal panel"><div class="case-modal-head"><div><span class="eyebrow">ANIME DROP · РУЛЕТКА НАГРАД</span><h2 id="caseModalTitle">Открытие кейса</h2></div><span class="case-live-pill">● LIVE DROP</span></div>
+    <div class="case-visual"><div class="case-pointer top">▼</div><div class="case-window" id="caseWindow"><div class="case-reel" id="caseReel"></div><div class="reel-center-glow"></div></div><div class="case-pointer bottom">▲</div></div>
+    <div class="case-result hidden" id="caseResult"></div>
+    <div class="case-modal-actions"><button class="btn" id="skipCaseSpin" type="button">Пропустить анимацию</button><button class="btn primary hidden" id="closeCaseResult" type="button">Забрать награду</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="./app.js"></script>
+</body>
+</html>
