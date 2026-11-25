@@ -3,29 +3,42 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<base href="./" />
 <meta name="theme-color" content="#141329" />
-<meta name="description" content="fristik.planner — расписание, статистика и коллекция аниме-героев." />
+<meta name="description" content="fristik.planner — планирование дня, недели и месяца, статистика, аниме-коллекция и мини-игра." />
 <title>fristik.planner — anime planner & collection</title>
+<link rel="icon" href="./assets/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="./assets/app-icon-192.png" />
+<link rel="manifest" href="./manifest.webmanifest" />
 <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
 <div class="app">
   <header class="topbar">
-    <div class="brand"><div class="logo"><img src="assets/images/embedded/embedded-01.webp" alt="Goku mascot" /></div><div><h1>fristik.planner</h1><p>Прокачивай себя. День за днём.</p></div></div>
+    <div class="brand"><div class="logo"><img src="./assets/images/embedded/embedded-01.png" alt="Goku mascot" /></div><div><h1>fristik.planner</h1><p>Прокачивай себя. День за днём.</p></div></div>
     <div class="top-actions">
       <div class="wallet-pill" aria-label="Баланс монет"><span>🪙</span><b id="coinBalance">0</b><small>монет</small></div>
+      <button class="btn notification-trigger" id="notificationBtn" type="button" aria-label="Уведомления" aria-expanded="false" title="Уведомления"><span aria-hidden="true">🔔</span><i id="notificationBadge" class="notification-badge hidden">0</i></button>
       <button class="btn" id="exportBtn" title="Скачать резервную копию">↧ Экспорт</button>
       <button class="btn" id="importBtn" title="Загрузить резервную копию">↥ Импорт</button>
-      <button class="btn primary" id="addBtn">＋ Добавить дело</button>
+      <button class="btn primary add-fab-target" id="addBtn" type="button">＋ Добавить дело</button>
       <input type="file" id="importFile" accept="application/json,.json" class="hidden" />
     </div>
   </header>
+  <section class="notification-panel panel hidden" id="notificationPanel" aria-label="Настройки уведомлений">
+    <div class="notification-panel-head"><div><strong>Напоминания</strong><small id="notificationStatus">Уведомления выключены</small></div><button class="close-mini" id="closeNotificationPanel" type="button" aria-label="Закрыть">×</button></div>
+    <div class="notification-setting-row"><label for="reminderLead">Напоминать о деле</label><select id="reminderLead"><option value="0">В момент начала</option><option value="5" selected>За 5 минут</option><option value="10">За 10 минут</option><option value="15">За 15 минут</option><option value="30">За 30 минут</option></select></div>
+    <button class="btn primary notification-enable" id="enableNotificationsBtn" type="button">Включить уведомления</button>
+    <p class="notification-footnote">Напоминания приходят, пока сайт открыт. Разрешение браузера можно изменить в настройках сайта.</p>
+    <div class="notification-upcoming" id="notificationUpcoming"><small>Ближайшие дела появятся здесь.</small></div>
+  </section>
 
   <nav class="main-nav" aria-label="Разделы планера">
     <button type="button" class="main-nav-btn active" data-page="schedule">▦ Расписание</button>
     <button type="button" class="main-nav-btn" data-page="stats">◈ Статистика</button>
     <button type="button" class="main-nav-btn" data-page="collection">✦ Коллекция</button>
     <button type="button" class="main-nav-btn" data-page="shop">🛒 Магазин</button>
+    <button type="button" class="main-nav-btn" data-page="game">⚡ Мини-игра</button>
   </nav>
 
   <section class="motivation-strip panel" aria-live="polite">
@@ -37,11 +50,18 @@
   <main id="schedulePage" class="page">
   <section class="toolbar panel">
     <div class="week-control">
-      <button class="btn icon" id="prevWeek" aria-label="Предыдущая неделя">‹</button>
+      <button class="btn icon" id="prevWeek" aria-label="Предыдущий период">‹</button>
       <div class="week-title"><strong id="weekTitle">Эта неделя</strong><span id="weekSubtitle">План на 7 дней</span></div>
-      <button class="btn icon" id="nextWeek" aria-label="Следующая неделя">›</button>
+      <button class="btn icon" id="nextWeek" aria-label="Следующий период">›</button>
     </div>
-    <div class="toolbar-right"><button class="btn today-btn" id="todayBtn">Сегодня</button></div>
+    <div class="toolbar-tools">
+      <div class="calendar-view-switch" role="group" aria-label="Период расписания">
+        <button type="button" class="view-switch-btn" data-calendar-view="day">День</button>
+        <button type="button" class="view-switch-btn active" data-calendar-view="week">Неделя</button>
+        <button type="button" class="view-switch-btn" data-calendar-view="month">Месяц</button>
+      </div>
+      <div class="toolbar-right"><button class="btn today-btn" id="todayBtn" type="button">Сегодня</button></div>
+    </div>
   </section>
 
   <section class="progress-overview">
@@ -55,8 +75,8 @@
       <div class="achievement-pill" id="achievementLabel">🌱 Начало пути</div><div class="rank-row"><span class="rank-title" id="currentTitle">Новичок</span><span class="rank-next" id="nextTitle">Следующий титул: Ученик · ур. 2</span></div>
     </div>
     <div class="quick-stats">
-      <div class="quick-stat panel"><span class="stat-icon">✅</span><span class="stat-label">ВЫПОЛНЕНО ЗА НЕДЕЛЮ</span><strong id="weekDoneCount">0 / 0</strong><small id="weekDoneHint">Пока всё впереди</small></div>
-      <div class="quick-stat panel"><span class="stat-icon">🎯</span><span class="stat-label">ПРОГРЕСС НЕДЕЛИ</span><strong id="weekPercent">0%</strong><small>От всех запланированных дел</small></div>
+      <div class="quick-stat panel"><span class="stat-icon">✅</span><span class="stat-label" id="periodDoneLabel">ВЫПОЛНЕНО ЗА НЕДЕЛЮ</span><strong id="weekDoneCount">0 / 0</strong><small id="weekDoneHint">Пока всё впереди</small></div>
+      <div class="quick-stat panel"><span class="stat-icon">🎯</span><span class="stat-label" id="periodRateLabel">ПРОГРЕСС НЕДЕЛИ</span><strong id="weekPercent">0%</strong><small>От всех запланированных дел</small></div>
       <div class="quick-stat panel"><span class="stat-icon">🔥</span><span class="stat-label">СЕРИЯ ДНЕЙ</span><strong id="streakCount">0 дней</strong><small>Дни подряд с развивающими делами</small></div>
       <div class="quick-stat panel"><span class="stat-icon">🏆</span><span class="stat-label">ВСЕГО ВЫПОЛНЕНО</span><strong id="allDoneCount">0</strong><small id="weekXpText">+0 XP на этой неделе</small></div>
     </div>
@@ -79,7 +99,7 @@
 
   <section class="task-area">
     <div class="task-list-panel panel">
-      <div class="section-heading"><div><span class="eyebrow">НЕ ДАЙ ПЛАНАМ ОСТАТЬСЯ ПЛАНАМИ</span><h2>Задачи недели</h2><p id="taskSummary">0 из 0 выполнено</p></div><span class="task-total-badge" id="taskTotalBadge">0 дел</span></div>
+      <div class="section-heading"><div><span class="eyebrow">НЕ ДАЙ ПЛАНАМ ОСТАТЬСЯ ПЛАНАМИ</span><h2 id="taskHeading">Задачи недели</h2><p id="taskSummary">0 из 0 выполнено</p></div><span class="task-total-badge" id="taskTotalBadge">0 дел</span></div>
       <div class="task-filters" role="group" aria-label="Фильтр задач">
         <button type="button" class="filter-btn active" data-task-filter="all">Все</button>
         <button type="button" class="filter-btn" data-task-filter="open">В планах</button>
@@ -89,7 +109,7 @@
       <div class="task-list" id="taskList"><div class="task-empty">Добавь первое дело в расписание — здесь появится твой список задач ✨</div></div>
     </div>
     <aside class="category-stats-panel panel">
-      <div class="section-heading compact"><div><span class="eyebrow">БАЛАНС НЕДЕЛИ</span><h2>По направлениям</h2></div></div>
+      <div class="section-heading compact"><div><span class="eyebrow" id="categoryPeriodLabel">БАЛАНС НЕДЕЛИ</span><h2>По направлениям</h2></div></div>
       <div id="categoryProgress" class="category-progress"><div class="task-empty">Пока нет статистики</div></div>
       <div class="xp-tip"><span>💡</span><p>XP начисляется только за развивающие дела. Сон, еда и отдых важны, но не должны превращаться в гонку за баллами.</p></div>
     </aside>
@@ -251,6 +271,25 @@
     </section>
     <section id="shopMarketView" class="shop-view hidden"><div class="section-heading"><div><h2>Витрина</h2><p>Косметические предметы для оформления профиля. Они не дают игрового преимущества.</p></div></div><div class="market-grid" id="marketGrid"></div><div class="craft-panel panel"><div><span class="eyebrow">ОБМЕН ОСКОЛКОВ</span><h3>Создай карточку гарантированно</h3><p>Копи осколки от повторов и выбирай редкость без случайности.</p></div><div class="craft-actions"><button class="btn small" data-craft="rare">Редкая · 60 💎</button><button class="btn small" data-craft="epic">Эпическая · 140 💎</button><button class="btn small" data-craft="legendary">Легендарная · 300 💎</button></div></div></section>
     <section id="shopCardsView" class="shop-view hidden"><div class="section-heading"><div><h2>Аниме-альбом</h2><p>Карточки, которые выпали из кейсов или были созданы за осколки.</p></div><span class="forms-count" id="cardsCount">0 / 0</span></div><div class="card-album-grid" id="cardAlbumGrid"></div></section>
+  </main>
+
+  <main id="gamePage" class="page hidden">
+    <section class="game-heading">
+      <div><span class="eyebrow">KI TRAINING · QUICK CHALLENGE</span><h2>Тренировка реакции</h2><p>Лови энергетические сферы, избегай ловушек и побей свой рекорд.</p></div>
+      <div class="game-best panel"><span>ЛУЧШИЙ РЕЗУЛЬТАТ</span><strong id="gameBestScore">0</strong><small>очков</small></div>
+    </section>
+    <section class="ki-game panel">
+      <div class="ki-game-top"><div class="game-stat"><small>ВРЕМЯ</small><b id="gameTimer">20</b><span>сек</span></div><div class="game-stat score-stat"><small>СЧЁТ</small><b id="gameScore">0</b><span>очков</span></div><div class="game-stat"><small>НАГРАДА СЕГОДНЯ</small><b id="gameRewardStatus">Не получена</b><span>до 15 🪙</span></div></div>
+      <div class="ki-game-arena" id="gameArena" aria-label="Игровое поле">
+        <div class="game-arena-idle" id="gameIdle"><div class="game-orb-preview">✦</div><h3>Собери энергию Ки!</h3><p>За 20 секунд лови светящиеся сферы. Золотые дают больше очков, красные ловушки отнимают баллы.</p><button class="btn primary game-start-btn" id="startGameBtn" type="button">Начать тренировку</button></div>
+        <div class="game-countdown hidden" id="gameCountdown">3</div>
+      </div>
+      <div class="ki-game-bottom"><div class="game-rules"><span>🟣 Сфера +1</span><span>✨ Золотая +3</span><span>🔴 Ловушка −2</span></div><span class="game-run-status" id="gameRunStatus">Готов к старту</span></div>
+    </section>
+    <section class="game-rewards-grid">
+      <article class="panel game-reward-card"><span class="game-reward-icon">🪙</span><div><b>Ежедневная награда</b><p>8–14 очков: +5 монет · 15–21: +10 · 22 и больше: +15 монет. Получить её можно один раз в день.</p></div></article>
+      <article class="panel game-reward-card"><span class="game-reward-icon">🛡️</span><div><b>Без фарма опыта</b><p>Мини-игра не начисляет XP и не влияет на титулы. Это короткая разминка для внимания, а не замена важным делам.</p></div></article>
+    </section>
   </main>
 </div>
 

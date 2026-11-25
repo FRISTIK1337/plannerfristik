@@ -41,6 +41,10 @@
   state.categories=DEFAULT_CATS.map(base=>({...base,...(existingCategories.find(c=>c.id===base.id)||{}),xp:NO_XP_CATS.has(base.id)?0:Number(existingCategories.find(c=>c.id===base.id)?.xp ?? base.xp)}));
   existingCategories.filter(c=>!DEFAULT_CATS.some(d=>d.id===c.id)).forEach(c=>state.categories.push({...c,xp:Number(c.xp??0)===3?0:Number(c.xp??0)}));
   state.settings={dailyGoal:2,weeklyGoal:10,...(state.settings||{})};
+  state.notifications={enabled:false,leadMinutes:5,lastNotified:[],...(state.notifications||{})};
+  state.notifications.leadMinutes=[0,5,10,15,30].includes(Number(state.notifications.leadMinutes))?Number(state.notifications.leadMinutes):5;
+  state.notifications.lastNotified=Array.isArray(state.notifications.lastNotified)?state.notifications.lastNotified:[];
+  state.game={bestScore:0,rewardDate:'',totalPlays:0,lastScore:0,...(state.game||{})};
   state.collection={unlocked:[],active:'goku',initialized:false,formsUnlocked:[],activeForms:{},... (state.collection||{})};
   if(!Array.isArray(state.collection.unlocked))state.collection.unlocked=[];
   if(!Array.isArray(state.collection.formsUnlocked))state.collection.formsUnlocked=[];
@@ -51,6 +55,7 @@
   let taskFilter='all';
   let weekStart=mondayOf(new Date());
   let activeMobileDate=toISO(new Date());
+  let calendarView='week';
   let editingId=null;
   const save=()=>{
     try{
@@ -66,46 +71,40 @@
   const toast=msg=>{const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2300)};
   const LEVEL_TITLES=[{level:1,title:'Новичок'},{level:2,title:'Ученик'},{level:3,title:'Практик'},{level:5,title:'Воин Z'},{level:7,title:'Сайян'},{level:10,title:'Суперсайян'},{level:15,title:'Защитник мечты'},{level:20,title:'Капитан'},{level:25,title:'Король пиратов'},{level:30,title:'Легенда'},{level:40,title:'Мастер Ки'},{level:50,title:'Легенда Нового мира'},{level:75,title:'За гранью'},{level:100,title:'Абсолют'}];
   function titleForLevel(level){let current=LEVEL_TITLES[0],next=null;for(const t of LEVEL_TITLES){if(t.level<=level)current=t;else{next=t;break;}}return {current:current.title,next};}
-  const CHARACTERS = [{"id":"goku","name":"Сон Гоку","series":"DRAGON BALL","seriesName":"Dragon Ball","role":"Сайян, который всегда ищет способ стать сильнее.","rarity":"Стартовый","rarityKey":"common","level":1,"quote":"Даже сильнейший когда-то начинал с первого шага.","requirements":[],"img":"assets/images/embedded/embedded-02.webp","palette":"#f29a45"},{"id":"vegeta","name":"Вегета","series":"DRAGON BALL","seriesName":"Dragon Ball","role":"Принц Сайянов. Характер, амбиции и железная воля.","rarity":"Редкий","rarityKey":"rare","level":5,"quote":"Работай над собой, даже когда никто не смотрит.","requirements":[{"metric":"level","target":5,"label":"Достигни 5 уровня"}],"img":"assets/images/embedded/embedded-03.webp","palette":"#4a8de7"},{"id":"gohan","name":"Гохан","series":"DRAGON BALL","seriesName":"Dragon Ball","role":"Сила, которая раскрывается через знания и дисциплину.","rarity":"Эпический","rarityKey":"epic","level":8,"quote":"Учёба тоже может стать твоей суперсилой.","requirements":[{"metric":"level","target":8,"label":"Достигни 8 уровня"},{"metric":"study","target":10,"label":"Открой достижение «Любознательный» · 10 учебных сессий"}],"img":"assets/images/embedded/embedded-04.webp","palette":"#a77ce8"},{"id":"luffy","name":"Монки Д. Луффи","series":"ONE PIECE","seriesName":"One Piece","role":"Капитан, который не отступает от своей мечты.","rarity":"Эпический","rarityKey":"epic","level":10,"quote":"Большой путь начинается с решения не сдаваться.","requirements":[{"metric":"level","target":10,"label":"Достигни 10 уровня"},{"metric":"productive","target":50,"label":"Открой достижение «Курс на Гранд-Лайн» · 50 важных задач"}],"img":"assets/images/embedded/embedded-05.webp","palette":"#dd685a"},{"id":"zoro","name":"Ророноа Зоро","series":"ONE PIECE","seriesName":"One Piece","role":"Мечник, который превращает повторения в мастерство.","rarity":"Легендарный","rarityKey":"legendary","level":12,"quote":"Повторяй базу, пока она не станет твоей силой.","requirements":[{"metric":"level","target":12,"label":"Достигни 12 уровня"},{"metric":"sport","target":5,"label":"Открой достижение «Первые мышцы» · 5 тренировок"}],"img":"assets/images/embedded/embedded-06.webp","palette":"#63bf8b"},{"id":"sanji","name":"Санджи","series":"ONE PIECE","seriesName":"One Piece","role":"Повар команды. Забота, навык и надёжная работа.","rarity":"Редкий","rarityKey":"rare","level":15,"quote":"Профессионализм складывается из сотен точных действий.","requirements":[{"metric":"level","target":15,"label":"Достигни 15 уровня"},{"metric":"work","target":25,"label":"Открой достижение «Надёжный профи» · 25 рабочих задач"}],"img":"assets/images/embedded/embedded-07.webp","palette":"#edc65f"},{"id":"naruto","name":"Наруто Узумаки","series":"NARUTO","seriesName":"Naruto","role":"Ниндзя, который доказывает всё постоянством.","rarity":"Эпический","rarityKey":"epic","level":18,"quote":"Не бросай себя после одного трудного дня.","requirements":[{"metric":"level","target":18,"label":"Достигни 18 уровня"},{"metric":"streak","target":7,"label":"Собери серию из 7 дней"}],"img":"assets/images/embedded/embedded-08.webp","palette":"#e9a348"},{"id":"kakashi","name":"Какаши Хатаке","series":"NARUTO","seriesName":"Naruto","role":"Спокойствие, подготовка и умение учиться у других.","rarity":"Легендарный","rarityKey":"legendary","level":20,"quote":"Подготовка — это то, что помогает действовать без суеты.","requirements":[{"metric":"level","target":20,"label":"Достигни 20 уровня"},{"metric":"study","target":50,"label":"Открой достижение «Мышление мастера» · 50 учебных сессий"}],"img":"assets/images/embedded/embedded-09.webp","palette":"#a1b7cb"},{"id":"tanjiro","name":"Тандзиро Камадо","series":"DEMON SLAYER","seriesName":"Demon Slayer","role":"Настойчивый герой, который растёт через ежедневную практику.","rarity":"Легендарный","rarityKey":"legendary","level":25,"quote":"Терпение и практика делают невозможное ближе.","requirements":[{"metric":"level","target":25,"label":"Достигни 25 уровня"},{"metric":"sport","target":50,"label":"Открой достижение «Мастер формы» · 50 тренировок"},{"metric":"productive","target":100,"label":"Открой достижение «Двигатель прогресса» · 100 важных задач"}],"img":"assets/images/embedded/embedded-10.webp","palette":"#5ab99b"}];
+  const CHARACTERS = [{"id":"goku","name":"Сон Гоку","series":"DRAGON BALL","seriesName":"Dragon Ball","role":"Сайян, который всегда ищет способ стать сильнее.","rarity":"Стартовый","rarityKey":"common","level":1,"quote":"Даже сильнейший когда-то начинал с первого шага.","requirements":[],"img":"./assets/images/embedded/embedded-02.jpg","palette":"#f29a45"},{"id":"vegeta","name":"Вегета","series":"DRAGON BALL","seriesName":"Dragon Ball","role":"Принц Сайянов. Характер, амбиции и железная воля.","rarity":"Редкий","rarityKey":"rare","level":5,"quote":"Работай над собой, даже когда никто не смотрит.","requirements":[{"metric":"level","target":5,"label":"Достигни 5 уровня"}],"img":"./assets/images/embedded/embedded-03.jpg","palette":"#4a8de7"},{"id":"gohan","name":"Гохан","series":"DRAGON BALL","seriesName":"Dragon Ball","role":"Сила, которая раскрывается через знания и дисциплину.","rarity":"Эпический","rarityKey":"epic","level":8,"quote":"Учёба тоже может стать твоей суперсилой.","requirements":[{"metric":"level","target":8,"label":"Достигни 8 уровня"},{"metric":"study","target":10,"label":"Открой достижение «Любознательный» · 10 учебных сессий"}],"img":"./assets/images/embedded/embedded-04.jpg","palette":"#a77ce8"},{"id":"luffy","name":"Монки Д. Луффи","series":"ONE PIECE","seriesName":"One Piece","role":"Капитан, который не отступает от своей мечты.","rarity":"Эпический","rarityKey":"epic","level":10,"quote":"Большой путь начинается с решения не сдаваться.","requirements":[{"metric":"level","target":10,"label":"Достигни 10 уровня"},{"metric":"productive","target":50,"label":"Открой достижение «Курс на Гранд-Лайн» · 50 важных задач"}],"img":"./assets/images/embedded/embedded-05.jpg","palette":"#dd685a"},{"id":"zoro","name":"Ророноа Зоро","series":"ONE PIECE","seriesName":"One Piece","role":"Мечник, который превращает повторения в мастерство.","rarity":"Легендарный","rarityKey":"legendary","level":12,"quote":"Повторяй базу, пока она не станет твоей силой.","requirements":[{"metric":"level","target":12,"label":"Достигни 12 уровня"},{"metric":"sport","target":5,"label":"Открой достижение «Первые мышцы» · 5 тренировок"}],"img":"./assets/images/embedded/embedded-06.jpg","palette":"#63bf8b"},{"id":"sanji","name":"Санджи","series":"ONE PIECE","seriesName":"One Piece","role":"Повар команды. Забота, навык и надёжная работа.","rarity":"Редкий","rarityKey":"rare","level":15,"quote":"Профессионализм складывается из сотен точных действий.","requirements":[{"metric":"level","target":15,"label":"Достигни 15 уровня"},{"metric":"work","target":25,"label":"Открой достижение «Надёжный профи» · 25 рабочих задач"}],"img":"./assets/images/embedded/embedded-07.jpg","palette":"#edc65f"},{"id":"naruto","name":"Наруто Узумаки","series":"NARUTO","seriesName":"Naruto","role":"Ниндзя, который доказывает всё постоянством.","rarity":"Эпический","rarityKey":"epic","level":18,"quote":"Не бросай себя после одного трудного дня.","requirements":[{"metric":"level","target":18,"label":"Достигни 18 уровня"},{"metric":"streak","target":7,"label":"Собери серию из 7 дней"}],"img":"./assets/images/embedded/embedded-08.jpg","palette":"#e9a348"},{"id":"kakashi","name":"Какаши Хатаке","series":"NARUTO","seriesName":"Naruto","role":"Спокойствие, подготовка и умение учиться у других.","rarity":"Легендарный","rarityKey":"legendary","level":20,"quote":"Подготовка — это то, что помогает действовать без суеты.","requirements":[{"metric":"level","target":20,"label":"Достигни 20 уровня"},{"metric":"study","target":50,"label":"Открой достижение «Мышление мастера» · 50 учебных сессий"}],"img":"./assets/images/embedded/embedded-09.jpg","palette":"#a1b7cb"},{"id":"tanjiro","name":"Тандзиро Камадо","series":"DEMON SLAYER","seriesName":"Demon Slayer","role":"Настойчивый герой, который растёт через ежедневную практику.","rarity":"Легендарный","rarityKey":"legendary","level":25,"quote":"Терпение и практика делают невозможное ближе.","requirements":[{"metric":"level","target":25,"label":"Достигни 25 уровня"},{"metric":"sport","target":50,"label":"Открой достижение «Мастер формы» · 50 тренировок"},{"metric":"productive","target":100,"label":"Открой достижение «Двигатель прогресса» · 100 важных задач"}],"img":"./assets/images/embedded/embedded-10.jpg","palette":"#5ab99b"}];
 
   CHARACTERS.push(
-    {id:'jotaro',name:'Джотаро Куджо',series:"JOJO'S BIZARRE ADVENTURE",seriesName:"JoJo's Bizarre Adventure",role:'Спокойствие, точность и несгибаемая воля. Его стенд — Star Platinum.',rarity:'Эпический',rarityKey:'epic',level:22,quote:'Хорошо. Продолжай идти вперёд.',requirements:[{metric:'level',target:22,label:'Достигни 22 уровня'},{metric:'study',target:10,label:'Заверши 10 учебных сессий'}],img:"assets/images/characters/jotaro.webp"},
-    {id:'dio',name:'Дио Брандо',series:"JOJO'S BIZARRE ADVENTURE",seriesName:"JoJo's Bizarre Adventure",role:'Амбиции, харизма и контроль времени. Его стенд — The World.',rarity:'Легендарный',rarityKey:'legendary',level:28,quote:'Время принадлежит тому, кто умеет им распорядиться.',requirements:[{metric:'level',target:28,label:'Достигни 28 уровня'},{metric:'work',target:15,label:'Заверши 15 рабочих задач'}],img:"assets/images/characters/dio.webp"}
+    {id:'jotaro',name:'Джотаро Куджо',series:"JOJO'S BIZARRE ADVENTURE",seriesName:"JoJo's Bizarre Adventure",role:'Спокойствие, точность и несгибаемая воля. Его стенд — Star Platinum.',rarity:'Эпический',rarityKey:'epic',level:22,quote:'Хорошо. Продолжай идти вперёд.',requirements:[{metric:'level',target:22,label:'Достигни 22 уровня'},{metric:'study',target:10,label:'Заверши 10 учебных сессий'}],img:"./assets/images/characters/jotaro.jpg"},
+    {id:'dio',name:'Дио Брандо',series:"JOJO'S BIZARRE ADVENTURE",seriesName:"JoJo's Bizarre Adventure",role:'Амбиции, харизма и контроль времени. Его стенд — The World.',rarity:'Легендарный',rarityKey:'legendary',level:28,quote:'Время принадлежит тому, кто умеет им распорядиться.',requirements:[{metric:'level',target:28,label:'Достигни 28 уровня'},{metric:'work',target:15,label:'Заверши 15 рабочих задач'}],img:"./assets/images/characters/dio.jpg"}
   );
 
 
   
   const FORM_SKINS = [{"id":"goku_ssj","characterId":"goku","name":"Супер Сайян","series":"Dragon Ball","rarity":"Редкая","rarityKey":"rare","level":10,"xp":900,"imgKey":"goku_ssj","description":"Золотая аура и первая большая трансформация."},{"id":"goku_blue","characterId":"goku","name":"Super Saiyan Blue","series":"Dragon Ball","rarity":"Эпическая","rarityKey":"epic","level":20,"xp":1900,"imgKey":"goku_blue","description":"Сила под полным контролем."},{"id":"goku_ui","characterId":"goku","name":"Ultra Instinct","series":"Dragon Ball","rarity":"Легендарная","rarityKey":"legendary","level":35,"xp":3400,"imgKey":"goku_ui","description":"Спокойствие, скорость и реакция без лишних мыслей."},{"id":"vegeta_blue","characterId":"vegeta","name":"Super Saiyan Blue","series":"Dragon Ball","rarity":"Эпическая","rarityKey":"epic","level":20,"xp":1900,"imgKey":"vegeta_blue","description":"Королевская гордость и совершенный контроль ки."},{"id":"vegeta_ego","characterId":"vegeta","name":"Ultra Ego","series":"Dragon Ball","rarity":"Легендарная","rarityKey":"legendary","level":40,"xp":3900,"imgKey":"vegeta_ego","description":"Форма, в которой воля становится оружием."},{"id":"luffy_gear2","characterId":"luffy","name":"Gear Second","series":"One Piece","rarity":"Редкая","rarityKey":"rare","level":12,"xp":1100,"imgKey":"luffy_gear2","description":"Ускорение тела и красный пар."},{"id":"luffy_gear4","characterId":"luffy","name":"Gear Fourth","series":"One Piece","rarity":"Эпическая","rarityKey":"epic","level":25,"xp":2400,"imgKey":"luffy_gear4","description":"Усиление, которое превращает давление в силу."},{"id":"luffy_gear5","characterId":"luffy","name":"Gear Fifth","series":"One Piece","rarity":"Легендарная","rarityKey":"legendary","level":40,"xp":3900,"imgKey":"luffy_gear5","description":"Свобода воображения и пробуждение силы."},{"id":"zoro_ashura","characterId":"zoro","name":"Асура","series":"One Piece","rarity":"Эпическая","rarityKey":"epic","level":25,"xp":2400,"imgKey":"zoro_ashura","description":"Три меча, стальная дисциплина и воля."},{"id":"zoro_king","characterId":"zoro","name":"Король Ада","series":"One Piece","rarity":"Легендарная","rarityKey":"legendary","level":42,"xp":4100,"imgKey":"zoro_king","description":"Высшая концентрация и сила клинка."},{"id":"naruto_kurama","characterId":"naruto","name":"Режим чакры Курамы","series":"Naruto","rarity":"Эпическая","rarityKey":"epic","level":25,"xp":2400,"imgKey":"naruto_kurama","description":"Сила девятихвостого и защита друзей."},{"id":"naruto_six","characterId":"naruto","name":"Режим Мудреца Шести Путей","series":"Naruto","rarity":"Легендарная","rarityKey":"legendary","level":42,"xp":4100,"imgKey":"naruto_six","description":"Редкое состояние, открытое через внутренний баланс."},{"id":"gohan_beast","characterId":"gohan","name":"Beast","series":"Dragon Ball","rarity":"Легендарная","rarityKey":"legendary","level":50,"xp":4900,"imgKey":"gohan_beast","description":"Скрытый потенциал, доведённый до предела."},{"id":"jotaro_stand","characterId":"jotaro","name":"Star Platinum","series":"JoJo","rarity":"Эпическая","rarityKey":"epic","level":24,"xp":2300,"imgKey":"jojo_star_platinum","description":"Стенд с невероятной точностью и скоростью."},{"id":"jotaro_world","characterId":"jotaro","name":"Star Platinum: The World","series":"JoJo","rarity":"Легендарная","rarityKey":"legendary","level":40,"xp":3900,"imgKey":"jojo_star_platinum_world","description":"Предел возможностей стенда Джотаро."},{"id":"dio_world","characterId":"dio","name":"The World","series":"JoJo","rarity":"Легендарная","rarityKey":"legendary","level":30,"xp":2900,"imgKey":"jojo_the_world","description":"Стенд, способный останавливать время."},{"id":"dio_over","characterId":"dio","name":"The World: Over Heaven","series":"JoJo","rarity":"Мифическая","rarityKey":"mythic","level":60,"xp":5900,"imgKey":"jojo_the_world_over","description":"Предельная форма силы Дио."}];
   const FORM_IMAGES = {
-"goku_ssj":"assets/images/embedded/embedded-13.webp",
-"goku_blue":"assets/images/embedded/embedded-14.webp",
-"goku_ui":"assets/images/embedded/embedded-15.webp",
-"vegeta_blue":"assets/images/embedded/embedded-16.webp",
-"luffy_gear2":"assets/images/embedded/embedded-17.webp",
-"luffy_gear4":"assets/images/embedded/embedded-18.webp",
-"luffy_gear5":"assets/images/embedded/embedded-19.webp",
-"zoro_ashura":"assets/images/embedded/embedded-20.webp",
-"naruto_kurama":"assets/images/embedded/embedded-21.webp",
-"svg_jotaro":"assets/images/embedded/embedded-11.svg",
-"svg_dio":"assets/images/embedded/embedded-12.svg"
-};
-
-  
-  Object.assign(FORM_IMAGES, {
-    vegeta_ego: 'assets/images/forms/vegeta-ego.webp',
-    zoro_king: 'assets/images/forms/zoro-king-of-hell.webp',
-    naruto_six: 'assets/images/forms/naruto-six-paths.webp',
-    gohan_beast: 'assets/images/forms/gohan-beast.webp',
-    jojo_star_platinum: 'assets/images/stands/star-platinum.webp',
-    jojo_star_platinum_world: 'assets/images/stands/star-platinum-world.webp',
-    jojo_the_world: 'assets/images/stands/the-world.webp',
-    jojo_the_world_over: 'assets/images/stands/the-world-over-heaven.webp'
-  });
+    "goku_ssj":"./assets/images/forms/goku-ssj.jpg",
+    "goku_blue":"./assets/images/forms/goku-blue.jpg",
+    "goku_ui":"./assets/images/forms/goku-ultra-instinct.jpg",
+    "vegeta_blue":"./assets/images/forms/vegeta-blue.jpg",
+    "vegeta_ego":"./assets/images/forms/vegeta-ego.jpg",
+    "luffy_gear2":"./assets/images/forms/luffy-gear2.jpg",
+    "luffy_gear4":"./assets/images/forms/luffy-gear4.jpg",
+    "luffy_gear5":"./assets/images/forms/luffy-gear5.jpg",
+    "zoro_ashura":"./assets/images/forms/zoro-ashura.jpg",
+    "zoro_king":"./assets/images/forms/zoro-king-of-hell.jpg",
+    "naruto_kurama":"./assets/images/forms/naruto-kurama.jpg",
+    "naruto_six":"./assets/images/forms/naruto-six-paths.jpg",
+    "gohan_beast":"./assets/images/forms/gohan-beast.jpg",
+    "jojo_star_platinum":"./assets/images/stands/star-platinum.jpg",
+    "jojo_star_platinum_world":"./assets/images/stands/star-platinum-world.jpg",
+    "jojo_the_world":"./assets/images/stands/the-world.jpg",
+    "jojo_the_world_over":"./assets/images/stands/the-world-over-heaven.jpg"
+  };
   const CASE_TYPES=[
-    {id:'basic',name:'Базовый кейс',price:80,icon:'📦',image:'assets/images/cases/basic.webp',tone:'#8d83bd',desc:'Небольшой шанс найти редкую карточку.',odds:{common:65,rare:25,epic:9,legendary:1}},
-    {id:'rare',name:'Редкий кейс',price:220,icon:'🧰',image:'assets/images/cases/rare.webp',tone:'#58b8d7',desc:'Больше редких и эпических наград.',odds:{common:45,rare:38,epic:14,legendary:3}},
-    {id:'epic',name:'Эпический кейс',price:450,icon:'💜',image:'assets/images/cases/epic.webp',tone:'#a77cff',desc:'Серьёзный шанс на эпическую карточку.',odds:{common:20,rare:40,epic:32,legendary:8}},
-    {id:'legendary',name:'Легендарный кейс',price:900,icon:'👑',image:'assets/images/cases/legendary.webp',tone:'#f0c76c',desc:'Высокие шансы на легендарный дроп.',odds:{common:5,rare:25,epic:50,legendary:20}}
+    {id:'basic',name:'Базовый кейс',price:80,icon:'📦',image:'./assets/images/cases/basic.jpg',tone:'#8d83bd',desc:'Небольшой шанс найти редкую карточку.',odds:{common:65,rare:25,epic:9,legendary:1}},
+    {id:'rare',name:'Редкий кейс',price:220,icon:'🧰',image:'./assets/images/cases/rare.jpg',tone:'#58b8d7',desc:'Больше редких и эпических наград.',odds:{common:45,rare:38,epic:14,legendary:3}},
+    {id:'epic',name:'Эпический кейс',price:450,icon:'💜',image:'./assets/images/cases/epic.jpg',tone:'#a77cff',desc:'Серьёзный шанс на эпическую карточку.',odds:{common:20,rare:40,epic:32,legendary:8}},
+    {id:'legendary',name:'Легендарный кейс',price:900,icon:'👑',image:'./assets/images/cases/legendary.jpg',tone:'#f0c76c',desc:'Высокие шансы на легендарный дроп.',odds:{common:5,rare:25,epic:50,legendary:20}}
   ];
   const MARKET_ITEMS=[
     {id:'frame_ki',name:'Рамка Ки',icon:'🟣',price:260,desc:'Сияющая рамка профиля в стиле Dragon Ball.'},
@@ -173,6 +172,13 @@
   const xpLevel=()=>Math.floor(netXPAll()/100)+1;
   const getWeekDates=()=>Array.from({length:7},(_,i)=>addDays(weekStart,i));
   const allEventsForWeek=()=>{const start=dayStart(toISO(weekStart)),end=dayStart(toISO(addDays(weekStart,7)));return state.events.filter(e=>{const x=eventInterval(e);return x.start<end&&x.end>start})};
+  function currentViewRange(){
+    if(calendarView==='day'){const start=dayStart(activeMobileDate);return {start,end:dayStart(toISO(addDays(start,1)))}}
+    if(calendarView==='month'){const a=parseISO(activeMobileDate),start=new Date(a.getFullYear(),a.getMonth(),1,0,0,0,0),end=new Date(a.getFullYear(),a.getMonth()+1,1,0,0,0,0);return {start,end}}
+    const start=dayStart(toISO(weekStart));return {start,end:dayStart(toISO(addDays(weekStart,7))) };
+  }
+  function eventsForCurrentView(){const {start,end}=currentViewRange();return state.events.filter(e=>{const x=eventInterval(e);return x.start<end&&x.end>start});}
+  function currentViewLabel(){return calendarView==='day'?'день':calendarView==='month'?'месяц':'неделю';}
   function renderCategories(){
     $('categoryChips').innerHTML=state.categories.map(c=>`<span class="cat-chip"><i class="dot" style="background:${c.color}"></i>${escapeHTML(c.name)} <span style="color:${Number(c.xp)>0?'#b9adff':'#9098b3'};font-size:10px">${Number(c.xp)>0?'+'+Number(c.xp)+' XP':'БЕЗ XP'}</span></span>`).join('');
     $('eventCategory').innerHTML=state.categories.map(c=>`<option value="${escapeHTML(c.id)}">${escapeHTML(c.name)} · ${Number(c.xp)>0?'+'+Number(c.xp)+' XP':'без XP'}</option>`).join('');
@@ -214,12 +220,14 @@
     const productiveDone=allDone.filter(e=>(Number(e.earnedXP)||0)>0);
     const totalXP=netXPAll(),earned= xpEarnedAll(),penalty=xpPenaltyAll();
     const level=Math.floor(totalXP/100)+1,intoLevel=totalXP%100,remaining=100-intoLevel;
-    const weekEvents=allEventsForWeek(),weekDone=weekEvents.filter(e=>e.done),weekFailed=weekEvents.filter(e=>e.failed);
-    const percent=weekEvents.length?Math.round(weekDone.length/weekEvents.length*100):0;
-    const weekStartISO=toISO(weekStart),weekEndISO=toISO(addDays(weekStart,7));
-    const weekEarned=state.events.filter(e=>e.done&&e.completedAt&&e.completedAt>=weekStartISO&&e.completedAt<weekEndISO).reduce((sum,e)=>sum+(Number(e.earnedXP)||0),0);
-    const weekPenalty=state.events.filter(e=>e.failed&&e.failedAt&&e.failedAt>=weekStartISO&&e.failedAt<weekEndISO).reduce((sum,e)=>sum+(Number(e.penaltyXP)||0),0);
-    const weekXP=Math.max(0,weekEarned-weekPenalty);
+    const periodEvents=eventsForCurrentView(),periodDone=periodEvents.filter(e=>e.done),periodFailed=periodEvents.filter(e=>e.failed);
+    const percent=periodEvents.length?Math.round(periodDone.length/periodEvents.length*100):0;
+    const {start:periodStart,end:periodEnd}=currentViewRange(),periodStartISO=toISO(periodStart),periodEndISO=toISO(periodEnd);
+    const periodEarned=state.events.filter(e=>e.done&&e.completedAt&&e.completedAt>=periodStartISO&&e.completedAt<periodEndISO).reduce((sum,e)=>sum+(Number(e.earnedXP)||0),0);
+    const periodPenalty=state.events.filter(e=>e.failed&&e.failedAt&&e.failedAt>=periodStartISO&&e.failedAt<periodEndISO).reduce((sum,e)=>sum+(Number(e.penaltyApplied)||0),0);
+    const periodXP=Math.max(0,periodEarned-periodPenalty);
+    const periodName=calendarView==='day'?'ДНЯ':calendarView==='month'?'МЕСЯЦА':'НЕДЕЛИ';
+    $('periodDoneLabel').textContent=`ВЫПОЛНЕНО ЗА ${periodName}`;$('periodRateLabel').textContent=`ПРОГРЕСС ${periodName}`;$('categoryPeriodLabel').textContent=`БАЛАНС · ${periodName}`;
     const rank=titleForLevel(level);
     $('levelNumber').textContent=level;$('levelCaption').textContent=rank.current+' · каждый важный шаг усиливает тебя';
     $('levelProgressFill').style.width=`${intoLevel}%`;$('levelXpText').textContent=`${intoLevel} / 100 XP`;$('totalXpText').textContent=`Всего ${totalXP} XP`;
@@ -227,16 +235,18 @@
     const milestones=[{n:1,label:'🌱 Первое дело — путь начался'},{n:10,label:'⚡ 10 побед — ты в ритме'},{n:25,label:'🚀 25 побед — отличный темп'},{n:50,label:'💎 50 побед — дисциплина растёт'},{n:100,label:'👑 100 побед — легендарный путь'}];
     const achieved=milestones.filter(m=>productiveDone.length>=m.n).sort((a,b)=>b.n-a.n)[0];
     $('achievementLabel').textContent=achieved?achieved.label:'🌱 Начало пути — первая победа впереди';
-    $('weekDoneCount').textContent=`${weekDone.length} / ${weekEvents.length}`;
-    $('weekDoneHint').textContent=weekEvents.length?(weekFailed.length?`${weekFailed.length} не выполнено · можно вернуться к плану`:weekEvents.length-weekDone.length?'Осталось '+(weekEvents.length-weekDone.length)+' дел':'Все дела недели закрыты 🎉'):'Добавь дела в расписание';
-    $('weekPercent').textContent=`${percent}%`;$('streakCount').textContent=`${getStreak()} дн.`;$('allDoneCount').textContent=allDone.length;$('weekXpText').textContent=`+${weekXP} XP чистыми на этой неделе`;
-    $('taskSummary').textContent=`${weekDone.length} сделано · ${weekFailed.length} не выполнено · ${weekEvents.length-weekDone.length-weekFailed.length} в планах`;
-    $('taskTotalBadge').textContent=`${weekEvents.length} ${weekEvents.length===1?'дело':'дел'}`;
+    $('weekDoneCount').textContent=`${periodDone.length} / ${periodEvents.length}`;
+    $('weekDoneHint').textContent=periodEvents.length?(periodFailed.length?`${periodFailed.length} не выполнено · можно вернуться к плану`:periodEvents.length-periodDone.length?'Осталось '+(periodEvents.length-periodDone.length)+' дел':'Все дела периода закрыты 🎉'):'Добавь дела в расписание';
+    $('weekPercent').textContent=`${percent}%`;$('streakCount').textContent=`${getStreak()} дн.`;$('allDoneCount').textContent=allDone.length;$('weekXpText').textContent=`+${periodXP} XP чистыми за период`;
   }
   function renderTasks(){
-    const events=allEventsForWeek().sort((a,b)=>eventInterval(a).start-eventInterval(b).start);
+    const events=eventsForCurrentView().sort((a,b)=>eventInterval(a).start-eventInterval(b).start);
     const filtered=events.filter(e=>taskFilter==='all'||(taskFilter==='done'?e.done:taskFilter==='failed'?e.failed:!e.done&&!e.failed));
     document.querySelectorAll('[data-task-filter]').forEach(b=>b.classList.toggle('active',b.dataset.taskFilter===taskFilter));
+    $('taskHeading').textContent=calendarView==='day'?'Задачи дня':calendarView==='month'?'Задачи месяца':'Задачи недели';
+    const doneCount=events.filter(e=>e.done).length,failedCount=events.filter(e=>e.failed).length;
+    $('taskSummary').textContent=`${doneCount} сделано · ${failedCount} не выполнено · ${events.length-doneCount-failedCount} в планах`;
+    $('taskTotalBadge').textContent=`${events.length} ${events.length===1?'дело':'дел'}`;
     $('taskList').innerHTML=filtered.length?filtered.map(e=>{
       const c=category(e.categoryId),range=eventInterval(e),dateLabel=range.start.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short'}).replace('.','');
       const endLabel=toISO(range.start)===toISO(range.end)?'':` → ${range.end.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short'}).replace('.','')}`;
@@ -384,7 +394,7 @@
     $('shinobiStreak').textContent=`${currentStreak} дн.`;$('animeNetXP').textContent=`${totalXpAll} XP`;
     renderEconomyStats();
   }
-  function renderEconomyStats(){const ledger=state.economy.ledger||[];const earned=ledger.filter(x=>x.type==='task').reduce((n,x)=>n+(Number(x.amount)||0),0);const spent=ledger.filter(x=>['purchase','case','craft'].includes(x.type)).reduce((n,x)=>n+(Number(x.amount)||0),0);const distinct=Object.keys(state.economy.ownedCards||{}).filter(k=>Number(state.economy.ownedCards[k])>0).length;const values=[['Заработано монет',earned.toLocaleString('ru-RU')+' 🪙'],['Потрачено',spent.toLocaleString('ru-RU')+' 🪙'],['Открыто кейсов',String(state.economy.totalCasesOpened||0)],['Карточек собрано',`${distinct} / ${cardCatalog().length}`]];$('economyStatsSummary').innerHTML=values.map(([label,value])=>`<div class="economy-stat"><span>${label}</span><b>${value}</b></div>`).join('');}
+  function renderEconomyStats(){const ledger=state.economy.ledger||[];const earned=ledger.filter(x=>['task','minigame'].includes(x.type)).reduce((n,x)=>n+(Number(x.amount)||0),0);const spent=ledger.filter(x=>['purchase','case','craft'].includes(x.type)).reduce((n,x)=>n+(Number(x.amount)||0),0);const distinct=Object.keys(state.economy.ownedCards||{}).filter(k=>Number(state.economy.ownedCards[k])>0).length;const values=[['Заработано монет',earned.toLocaleString('ru-RU')+' 🪙'],['Потрачено',spent.toLocaleString('ru-RU')+' 🪙'],['Открыто кейсов',String(state.economy.totalCasesOpened||0)],['Карточек собрано',`${distinct} / ${cardCatalog().length}`]];$('economyStatsSummary').innerHTML=values.map(([label,value])=>`<div class="economy-stat"><span>${label}</span><b>${value}</b></div>`).join('');}
 
   let collectionFilter='all';
 
@@ -404,7 +414,7 @@
     if(!$('formsGrid'))return;
     const open=new Set(state.collection.formsUnlocked),shown=FORM_SKINS.filter(f=>formFilter==='all'||(formFilter==='unlocked'?open.has(f.id):!open.has(f.id)));
     $('formsCount').textContent=`${open.size} / ${FORM_SKINS.length}`;
-    $('formsGrid').innerHTML=shown.map(f=>{const unlocked=open.has(f.id),active=state.collection.activeForms[f.characterId]===f.id,progress=formProgress(f),char=CHARACTERS.find(c=>c.id===f.characterId);return `<article class="form-card ${unlocked?'open':'locked'} ${active?'active':''}" style="--form-color:${f.rarityKey==='legendary'||f.rarityKey==='mythic'?'#efc86f':f.rarityKey==='epic'?'#b28aff':f.rarityKey==='rare'?'#59c4e8':'#9e9abf'}"><img src="${getFormImage(f)}" alt="${escapeHTML(f.name)}" loading="lazy"><div class="form-meta"><small>${escapeHTML(char?.name||'Герой')}</small><span class="rarity-pill rarity-${f.rarityKey}">${f.rarity.toUpperCase()}</span></div><h3>${escapeHTML(f.name)}</h3><p>${escapeHTML(f.description)}</p>${unlocked?`<button class="btn ${active?'':'primary'} small" type="button" data-form-select="${f.id}" ${active?'disabled':''}>${active?'✓ Активна':'Выбрать форму'}</button>`:`<div class="form-req-caption">${escapeHTML(formRequirementText(f))}</div><div class="form-progress"><i style="width:${progress}%"></i></div><button class="btn small" type="button" disabled>${progress}% · условия</button>`}</article>`;}).join('')||'<div class="collection-empty">В этом фильтре пока пусто.</div>';
+    $('formsGrid').innerHTML=shown.map(f=>{const unlocked=open.has(f.id),active=state.collection.activeForms[f.characterId]===f.id,progress=formProgress(f),char=CHARACTERS.find(c=>c.id===f.characterId);return `<article class="form-card ${unlocked?'open':'locked'} ${active?'active':''}" style="--form-color:${f.rarityKey==='legendary'||f.rarityKey==='mythic'?'#efc86f':f.rarityKey==='epic'?'#b28aff':f.rarityKey==='rare'?'#59c4e8':'#9e9abf'}"><img src="${getFormImage(f)}" alt="${escapeHTML(f.name)}" loading="eager"><div class="form-meta"><small>${escapeHTML(char?.name||'Герой')}</small><span class="rarity-pill rarity-${f.rarityKey}">${f.rarity.toUpperCase()}</span></div><h3>${escapeHTML(f.name)}</h3><p>${escapeHTML(f.description)}</p>${unlocked?`<button class="btn ${active?'':'primary'} small" type="button" data-form-select="${f.id}" ${active?'disabled':''}>${active?'✓ Активна':'Выбрать форму'}</button>`:`<div class="form-req-caption">${escapeHTML(formRequirementText(f))}</div><div class="form-progress"><i style="width:${progress}%"></i></div><button class="btn small" type="button" disabled>${progress}% · условия</button>`}</article>`;}).join('')||'<div class="collection-empty">В этом фильтре пока пусто.</div>';
     const activeId=state.collection.active,activeFormId=state.collection.activeForms[activeId],activeForm=FORM_SKINS.find(f=>f.id===activeFormId&&open.has(f.id)),activeChar=CHARACTERS.find(c=>c.id===activeId);
     if(activeChar&&$('activeHeroArt')){$('activeHeroArt').innerHTML=`<span class="spotlight-aura"></span><img src="${activeForm?getFormImage(activeForm):activeChar.img}" alt="${escapeHTML(activeForm?.name||activeChar.name)}" />`;if($('activeHeroQuote')&&activeForm)$('activeHeroQuote').textContent=`${activeChar.quote} · Форма: ${activeForm.name}`;}
   }
@@ -414,11 +424,11 @@
     document.querySelectorAll('[data-shop-tab]').forEach(b=>b.classList.toggle('active',b.dataset.shopTab===shopTab));
     ['cases','market','cards'].forEach(tab=>$('shop'+tab[0].toUpperCase()+tab.slice(1)+'View')?.classList.toggle('hidden',shopTab!==tab));
     const cardPool=cardCatalog();
-    if($('caseGrid'))$('caseGrid').innerHTML=CASE_TYPES.map(c=>`<article class="case-card" style="--case-glow:${c.tone}55"><div class="case-art"><img class="case-cover" src="${c.image}" alt="${escapeHTML(c.name)}" loading="lazy"></div><h3>${c.name}</h3><p>${c.desc}</p><div class="rarity-mini">${Object.entries(c.odds).map(([r,v])=>`<i>${rarityLabel(r)} ${v}%</i>`).join('')}</div><div class="case-price"><b>🪙 ${c.price}</b><small>${state.economy.coins>=c.price?'Можно открыть':'Не хватает монет'}</small></div><button type="button" class="btn primary small" data-open-case="${c.id}" ${state.economy.coins<c.price?'disabled':''}>Открыть кейс</button></article>`).join('');
+    if($('caseGrid'))$('caseGrid').innerHTML=CASE_TYPES.map(c=>`<article class="case-card" style="--case-glow:${c.tone}55"><div class="case-art"><img class="case-cover" src="${c.image}" alt="${escapeHTML(c.name)}" loading="eager"></div><h3>${c.name}</h3><p>${c.desc}</p><div class="rarity-mini">${Object.entries(c.odds).map(([r,v])=>`<i>${rarityLabel(r)} ${v}%</i>`).join('')}</div><div class="case-price"><b>🪙 ${c.price}</b><small>${state.economy.coins>=c.price?'Можно открыть':'Не хватает монет'}</small></div><button type="button" class="btn primary small" data-open-case="${c.id}" ${state.economy.coins<c.price?'disabled':''}>Открыть кейс</button></article>`).join('');
     if($('oddsGrid'))$('oddsGrid').innerHTML=CASE_TYPES.map(c=>`<div class="odds-card"><b>${c.name}</b>${Object.entries(c.odds).map(([r,v])=>`<div class="odds-line"><span>${rarityLabel(r)}</span><strong>${v}%</strong></div>`).join('')}</div>`).join('');
     if($('pityText'))$('pityText').textContent=`До гарантированной эпической карточки: ${Math.max(0,10-(Number(state.economy.epicPity)||0))} открытий`;
     if($('marketGrid'))$('marketGrid').innerHTML=MARKET_ITEMS.map(item=>{const owned=state.economy.ownedItems.includes(item.id),equipped=Object.values(state.economy.equippedItems).includes(item.id);return `<article class="market-item ${owned?'owned':''}"><div class="market-item-art">${item.icon}</div><h3>${item.name}</h3><p>${item.desc}</p><div class="market-item-foot"><b>${owned?'Куплено':`🪙 ${item.price}`}</b>${owned?`<button class="btn small ${equipped?'':'primary'}" data-equip-item="${item.id}" type="button">${equipped?'Надето':'Надеть'}</button>`:`<button class="btn primary small" data-buy-item="${item.id}" type="button" ${state.economy.coins<item.price?'disabled':''}>Купить</button>`}</div></article>`;}).join('');
-    if($('cardAlbumGrid')){$('cardsCount').textContent=`${Object.keys(state.economy.ownedCards).filter(k=>state.economy.ownedCards[k]>0).length} / ${cardPool.length}`;$('cardAlbumGrid').innerHTML=cardPool.map(card=>{const count=Number(state.economy.ownedCards[card.id])||0;const rarityColor=({common:'#a8adbf',rare:'#69c4e8',epic:'#b58bff',legendary:'#f2ce76'})[card.rarity];return `<article class="collectible-card ${count?'':'locked'}" style="--card-rarity:${rarityColor}"><span class="collectible-count">${count?'×'+count:'?'}</span><img src="${card.img}" alt="${escapeHTML(card.name)}" loading="lazy"><h4>${count?escapeHTML(card.name):'Не открыта'}</h4><small>${count?'Есть в альбоме':'Найди в кейсе'}</small><br><span class="rarity-pill rarity-${card.rarity}">${rarityLabel(card.rarity).toUpperCase()}</span></article>`;}).join('');}
+    if($('cardAlbumGrid')){$('cardsCount').textContent=`${Object.keys(state.economy.ownedCards).filter(k=>state.economy.ownedCards[k]>0).length} / ${cardPool.length}`;$('cardAlbumGrid').innerHTML=cardPool.map(card=>{const count=Number(state.economy.ownedCards[card.id])||0;const rarityColor=({common:'#a8adbf',rare:'#69c4e8',epic:'#b58bff',legendary:'#f2ce76'})[card.rarity];return `<article class="collectible-card ${count?'':'locked'}" style="--card-rarity:${rarityColor}"><span class="collectible-count">${count?'×'+count:'?'}</span><img src="${card.img}" alt="${escapeHTML(card.name)}" loading="eager"><h4>${count?escapeHTML(card.name):'Не открыта'}</h4><small>${count?'Есть в альбоме':'Найди в кейсе'}</small><br><span class="rarity-pill rarity-${card.rarity}">${rarityLabel(card.rarity).toUpperCase()}</span></article>`;}).join('');}
   }
   function rarityLabel(key){return ({common:'Обычная',rare:'Редкая',epic:'Эпическая',legendary:'Легендарная',mythic:'Мифическая'})[key]||'Обычная';}
   function weightedRarity(caseDef){const entries=Object.entries(caseDef.odds);let r=Math.random()*100;for(const [key,weight] of entries){r-=weight;if(r<=0)return key;}return 'common';}
@@ -493,7 +503,7 @@
       const isOpen=unlocked.has(ch.id),isActive=active.id===ch.id,pct=characterProgress(ch,metrics);
       const reqSummary=characterRequirementSummary(ch,metrics);
       return `<article class="character-card ${isOpen?'is-open':'is-locked'} ${isActive?'is-active':''}">
-        <div class="character-art"><img src="${ch.img}" alt="${escapeHTML(ch.name)}" loading="lazy"/><div class="character-art-top"><span class="character-series">${ch.series}</span><span class="rarity-pill rarity-${ch.rarityKey}">${ch.rarity.toUpperCase()}</span></div>${isOpen?'':`<div class="character-locked-overlay"><span>🔒</span></div>`}</div>
+        <div class="character-art"><img src="${ch.img}" alt="${escapeHTML(ch.name)}" loading="eager"/><div class="character-art-top"><span class="character-series">${ch.series}</span><span class="rarity-pill rarity-${ch.rarityKey}">${ch.rarity.toUpperCase()}</span></div>${isOpen?'':`<div class="character-locked-overlay"><span>🔒</span></div>`}</div>
         <div class="character-card-info"><div class="character-name-line"><h3>${escapeHTML(ch.name)}</h3><small>${isOpen?(isActive?'АКТИВНЫЙ ГЕРОЙ':'ОТКРЫТ'):'ЗАКРЫТ'}</small></div><p class="character-role">${escapeHTML(ch.role)}</p>
         <div class="character-unlock-note">${isOpen?`<b>✦ Персонаж открыт</b><br>${isActive?'Сейчас выбран в профиле':'Можно выбрать активным героем'}`:`<b>Условия открытия</b><br>${escapeHTML(reqSummary)}`}</div>
         ${isOpen?'':`<div class="character-progress-mini"><i style="width:${pct}%"></i></div>`}
@@ -525,48 +535,190 @@
     $('characterModal').classList.remove('open');$('unlockModal').classList.remove('open');
   }
 
+  // Browser reminders: they are evaluated while the planner tab is open.
+  let reminderTimer=null;
+  function upcomingEvents(){
+    const now=new Date(),limit=addDays(now,1);
+    return state.events.filter(e=>!e.done&&!e.failed).map(e=>({event:e,start:eventInterval(e).start})).filter(x=>x.start>=now&&x.start<=limit).sort((a,b)=>a.start-b.start);
+  }
+  function updateNotificationPanel(){
+    const panel=$('notificationPanel');if(!panel)return;
+    const supported='Notification' in window;
+    const permission=supported?Notification.permission:'unsupported';
+    const enabled=!!state.notifications.enabled&&permission==='granted';
+    $('notificationStatus').textContent=!supported?'Браузер не поддерживает уведомления':permission==='denied'?'Разрешение запрещено в браузере':enabled?'Напоминания включены':'Уведомления выключены';
+    $('enableNotificationsBtn').textContent=enabled?'Выключить уведомления':permission==='denied'?'Разрешить в настройках браузера':'Включить уведомления';
+    $('enableNotificationsBtn').disabled=permission==='denied'||!supported;
+    $('reminderLead').value=String(state.notifications.leadMinutes);
+    const next=upcomingEvents();
+    $('notificationUpcoming').innerHTML=next.length?next.slice(0,4).map(({event,start})=>`<div class="notification-upcoming-item"><span class="notification-upcoming-dot"></span><span><b>${escapeHTML(event.title)}</b><small>${start.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short'})} · ${pad(start.getHours())}:${pad(start.getMinutes())}</small></span></div>`).join(''):'<small>В ближайшие 24 часа новых дел нет.</small>';
+    const badge=$('notificationBadge');badge.textContent=String(next.length);badge.classList.toggle('hidden',next.length===0);
+    $('notificationBtn').setAttribute('aria-expanded',String(!panel.classList.contains('hidden')));
+  }
+  async function enableBrowserNotifications(){
+    if(!('Notification' in window)){toast('Этот браузер не поддерживает уведомления');return;}
+    if(!window.isSecureContext){toast('Уведомления доступны после публикации по HTTPS');return;}
+    if(Notification.permission==='denied'){toast('Разреши уведомления для сайта в настройках браузера');return;}
+    let permission=Notification.permission;
+    if(permission==='default')permission=await Notification.requestPermission();
+    if(permission==='granted'){
+      state.notifications.enabled=true;save();updateNotificationPanel();toast('Уведомления включены 🔔');
+      showPlannerNotification('fristik.planner работает','Напоминания о запланированных делах включены.');
+      checkUpcomingNotifications();
+    }else{state.notifications.enabled=false;save();updateNotificationPanel();toast('Браузер не разрешил уведомления');}
+  }
+  function showPlannerNotification(title,body,tag='fristik-planner-reminder'){
+    const options={body,icon:new URL('./assets/app-icon-192.png',document.baseURI).href,badge:new URL('./assets/app-icon-192.png',document.baseURI).href,tag,renotify:false};
+    if('serviceWorker' in navigator){navigator.serviceWorker.ready.then(reg=>reg.showNotification(title,options)).catch(()=>{try{new Notification(title,options)}catch(e){console.warn(e)}});}
+    else{try{new Notification(title,options)}catch(e){console.warn(e)}}
+  }
+  function checkUpcomingNotifications(){
+    if(!state.notifications.enabled||!('Notification' in window)||Notification.permission!=='granted')return;
+    const now=new Date(),lead=Number(state.notifications.leadMinutes)||0,seen=new Set(state.notifications.lastNotified);
+    state.events.forEach(e=>{
+      if(e.done||e.failed)return;
+      const start=eventInterval(e).start,diff=start-now;
+      const key=`${e.id}@${start.getTime()}`;
+      if(diff>=0&&diff<=Math.max(lead*60000,30000)&&!seen.has(key)){
+        const when=diff<=30000?'Начинается сейчас':`Начнётся через ${Math.max(1,Math.ceil(diff/60000))} мин.`;
+        showPlannerNotification(`Скоро: ${e.title}`,`${when} · ${e.start}`,`fristik-reminder-${key}`);
+        seen.add(key);
+      }
+    });
+    state.notifications.lastNotified=[...seen].slice(-120);save();
+  }
+  function initNotifications(){
+    $('notificationBtn').addEventListener('click',()=>{const p=$('notificationPanel');p.classList.toggle('hidden');updateNotificationPanel();});
+    $('closeNotificationPanel').addEventListener('click',()=>{$('notificationPanel').classList.add('hidden');updateNotificationPanel();});
+    $('enableNotificationsBtn').addEventListener('click',()=>{if(state.notifications.enabled&&('Notification' in window)&&Notification.permission==='granted'){state.notifications.enabled=false;save();updateNotificationPanel();toast('Напоминания выключены');}else enableBrowserNotifications();});
+    $('reminderLead').addEventListener('change',()=>{state.notifications.leadMinutes=Number($('reminderLead').value)||0;save();updateNotificationPanel();toast('Время напоминания обновлено');});
+    document.addEventListener('click',e=>{if(!$('notificationPanel').contains(e.target)&&!$('notificationBtn').contains(e.target))$('notificationPanel').classList.add('hidden');});
+    updateNotificationPanel();checkUpcomingNotifications();reminderTimer=setInterval(checkUpcomingNotifications,30000);
+  }
+  function registerAppServiceWorker(){
+    if(!('serviceWorker' in navigator)||!window.isSecureContext)return;
+    navigator.serviceWorker.register('./sw.js').catch(err=>console.warn('Service worker registration failed',err));
+  }
+
+  // Mini-game: a short reaction drill with a capped once-per-day coin reward.
+  let gameRunning=false,gameScore=0,gameSeconds=20,gameClock=null,gameSpawner=null,gameCountdownTimer=null;
+  const gameArena=()=>$('gameArena');
+  function renderGameInfo(){
+    $('gameBestScore').textContent=String(state.game.bestScore||0);
+    $('gameRewardStatus').textContent=state.game.rewardDate===toISO(new Date())?'Получена':'Не получена';
+    $('gameScore').textContent=String(gameRunning?gameScore:(state.game.lastScore||0));
+    $('gameTimer').textContent=String(gameRunning?gameSeconds:20);
+  }
+  function spawnKiTarget(){
+    if(!gameRunning)return;
+    const target=document.createElement('button');
+    const roll=Math.random(),kind=roll>.88?'trap':roll>.68?'gold':'normal';
+    target.type='button';target.className=`ki-target ${kind}`;target.dataset.target=kind;
+    target.textContent=kind==='trap'?'✕':kind==='gold'?'✦':'●';
+    target.setAttribute('aria-label',kind==='trap'?'Ловушка':kind==='gold'?'Золотая сфера':'Сфера энергии');
+    target.style.left=`${7+Math.random()*82}%`;target.style.top=`${8+Math.random()*78}%`;
+    gameArena().appendChild(target);
+    setTimeout(()=>target.remove(),kind==='trap'?900:1150);
+  }
+  function updateGameScore(){ $('gameScore').textContent=String(gameScore); }
+  function finishMiniGame(){
+    if(!gameRunning)return;gameRunning=false;clearInterval(gameClock);clearInterval(gameSpawner);clearInterval(gameCountdownTimer);gameArena().querySelectorAll('.ki-target').forEach(x=>x.remove());
+    state.game.totalPlays=(Number(state.game.totalPlays)||0)+1;state.game.lastScore=gameScore;state.game.bestScore=Math.max(Number(state.game.bestScore)||0,gameScore);
+    let reward=0,message='Хорошая разминка! Попробуй ещё раз и улучши рекорд.';
+    if(gameScore>=8&&state.game.rewardDate!==toISO(new Date())){
+      reward=gameScore>=22?15:gameScore>=15?10:5;state.economy.coins+=reward;state.game.rewardDate=toISO(new Date());
+      state.economy.ledger.push({type:'minigame',amount:reward,date:toISO(new Date()),score:gameScore});
+      message=`Отличная реакция! +${reward} монет за сегодняшнюю тренировку.`;
+    }else if(state.game.rewardDate===toISO(new Date()))message='Сегодняшняя награда уже получена. Рекорд всё ещё можно улучшить!';
+    else message='Нужно набрать хотя бы 8 очков для ежедневной награды. Можно сыграть ещё раз.';
+    save();renderEconomyUI();updateWalletUI();renderGameInfo();
+    $('gameRunStatus').textContent=message;
+    $('gameIdle').classList.remove('hidden');$('gameIdle').innerHTML=`<div class="game-result-emblem">${gameScore>=22?'🏆':gameScore>=8?'⚡':'🎯'}</div><h3>${gameScore>=22?'Невероятная реакция!':gameScore>=8?'Тренировка завершена':'Попробуй ещё раз'}</h3><p>Твой результат: <b>${gameScore}</b> очков. ${escapeHTML(message)}</p><button class="btn primary game-start-btn" data-game-start type="button">Играть ещё раз</button>`;
+    $('gameCountdown').classList.add('hidden');toast(message);
+  }
+  function startMiniGame(){
+    if(gameRunning)return;gameRunning=true;gameScore=0;gameSeconds=20;
+    $('gameIdle').classList.add('hidden');$('gameArena').querySelectorAll('.ki-target').forEach(x=>x.remove());
+    $('gameCountdown').classList.remove('hidden');$('gameRunStatus').textContent='Приготовься…';updateGameScore();$('gameTimer').textContent='20';
+    let count=3;$('gameCountdown').textContent=String(count);
+    gameCountdownTimer=setInterval(()=>{count--;if(count>0){$('gameCountdown').textContent=String(count);}else{clearInterval(gameCountdownTimer);$('gameCountdown').classList.add('hidden');$('gameRunStatus').textContent='Лови сферы!';gameSpawner=setInterval(spawnKiTarget,520);gameClock=setInterval(()=>{gameSeconds--; $('gameTimer').textContent=String(gameSeconds);if(gameSeconds<=0)finishMiniGame();},1000);}},700);
+  }
+  function initMiniGame(){
+    $('gameArena').addEventListener('click',e=>{
+      const start=e.target.closest('[data-game-start],#startGameBtn');if(start){startMiniGame();return;}
+      const target=e.target.closest('.ki-target');if(!target||!gameRunning)return;
+      const kind=target.dataset.target;target.remove();gameScore=kind==='trap'?Math.max(0,gameScore-2):gameScore+(kind==='gold'?3:1);updateGameScore();
+    });
+  }
+
   function setPage(page){
-    const pages={schedule:'schedulePage',stats:'statsPage',collection:'collectionPage',shop:'shopPage'};
+    const pages={schedule:'schedulePage',stats:'statsPage',collection:'collectionPage',shop:'shopPage',game:'gamePage'};
     Object.entries(pages).forEach(([key,id])=>$(id).classList.toggle('hidden',key!==page));
     document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
     if(page==='stats')renderStats();
-    if(page==='collection')renderCollection();if(page==='shop')renderShop();
+    if(page==='collection')renderCollection();if(page==='shop')renderShop();if(page==='game')renderGameInfo();
     window.scrollTo({top:0,behavior:'smooth'});
   }
-  function render(){
-    const newlyUnlocked=syncCollectionUnlocks(true);syncFormUnlocks(true);renderEconomyUI();
-    const hourPx=window.matchMedia('(max-width: 680px)').matches?58:64;
-    const dates=getWeekDates();const weekEnd=dates[6];
-    $('weekTitle').textContent=`${fmtShort(weekStart)} — ${fmtShort(weekEnd)}`;
-    $('weekSubtitle').textContent=`${weekStart.getFullYear()} · ${weekStart.toLocaleDateString('ru-RU',{month:'long'})}`;
-    renderMobileDays(dates);
-    const isToday=iso=>iso===toISO(new Date());
+  function renderTimelineDay(d,hourPx,showDayHead=true){
+    const iso=toISO(d),isToday=iso===toISO(new Date());
     let html='<div class="time-head"></div>';
-    dates.forEach(d=>{const iso=toISO(d);html+=`<div class="day-head ${isToday(iso)?'today':''} ${iso===activeMobileDate?'active-mobile':''}" data-head-day="${iso}"><div class="dow">${d.toLocaleDateString('ru-RU',{weekday:'short'}).replace('.','')}</div><div class="date">${pad(d.getDate())}</div></div>`});
-    html+='<div class="time-axis">'+Array.from({length:24},(_,h)=>`<div class="time-label">${pad(h)}:00</div>`).join('')+'</div>';
-    dates.forEach(d=>{
-      const iso=toISO(d);const dayEvents=allocateLanes(state.events.map(e=>segmentsForDay(e,iso)).filter(Boolean));
-      html+=`<div class="day-column ${isToday(iso)?'today-col':''} ${iso===activeMobileDate?'active-mobile':''}" data-column-day="${iso}">`;
-      for(let h=0;h<24;h++) html+=`<div class="slot-hit" style="top:${h*hourPx}px" data-date="${iso}" data-hour="${h}" aria-label="Добавить дело ${h}:00"></div>`;
-      dayEvents.forEach(seg=>{
-        const e=seg.event,start=seg.startMin,end=seg.endMin,c=category(e.categoryId);const top=(start/60)*hourPx,height=Math.max(25,((end-start)/60)*hourPx-3);const laneCount=Math.max(seg._laneCount,1),width=100/laneCount,left=seg._lane*width;
-        let label;
-        if(seg.continuesBefore) label=`Продолжение · 00:00 — ${time(end)}`;
-        else if(seg.continuesAfter) label=`${time(start)} — 00:00 · далее`;
-        else label=`${time(start)} — ${time(end)}`;
-        const fullTime=`${fmtDateShort(e.date)} ${e.start} → ${fmtDateShort(e.endDate||e.date)} ${e.end}`;
-        html+=`<button class="event ${e.done?'completed':e.failed?'failed':''}" data-event="${escapeHTML(e.id)}" data-segment-date="${iso}" style="--event-color:${c.color};top:${top+2}px;height:${height}px;left:calc(${left}% + 3px);width:calc(${width}% - 6px)" title="${escapeHTML(e.title)} · ${escapeHTML(fullTime)}"><span class="event-title"><i class="event-dot"></i>${escapeHTML(e.title)}${e.done?'<span class="event-status">✓</span>':e.failed?'<span class="event-status failed-status">×</span>':''}</span><span class="event-time">${escapeHTML(label)}</span>${height>76&&e.notes?`<span class="event-note">${escapeHTML(e.notes)}</span>`:''}</button>`;
-      });
-      html+='</div>';
+    if(showDayHead)html+=`<div class="day-head ${isToday?'today':''}"><div class="dow">${d.toLocaleDateString('ru-RU',{weekday:'long'})}</div><div class="date">${pad(d.getDate())} ${d.toLocaleDateString('ru-RU',{month:'long'})}</div></div>`;
+    html+=`<div class="time-axis">${Array.from({length:24},(_,h)=>`<div class="time-label">${pad(h)}:00</div>`).join('')}</div>`;
+    const dayEvents=allocateLanes(state.events.map(e=>segmentsForDay(e,iso)).filter(Boolean));
+    html+=`<div class="day-column ${isToday?'today-col':''}" data-column-day="${iso}">`;
+    for(let h=0;h<24;h++)html+=`<div class="slot-hit" style="top:${h*hourPx}px" data-date="${iso}" data-hour="${h}" aria-label="Добавить дело ${h}:00"></div>`;
+    dayEvents.forEach(seg=>{
+      const e=seg.event,start=seg.startMin,end=seg.endMin,c=category(e.categoryId);const top=(start/60)*hourPx,height=Math.max(25,((end-start)/60)*hourPx-3);
+      let label;if(seg.continuesBefore)label=`Продолжение · 00:00 — ${time(end)}`;else if(seg.continuesAfter)label=`${time(start)} — 00:00 · далее`;else label=`${time(start)} — ${time(end)}`;
+      const fullTime=`${fmtDateShort(e.date)} ${e.start} → ${fmtDateShort(e.endDate||e.date)} ${e.end}`;
+      html+=`<button class="event ${e.done?'completed':e.failed?'failed':''}" data-event="${escapeHTML(e.id)}" data-segment-date="${iso}" style="--event-color:${c.color};top:${top+2}px;height:${height}px;left:calc(${seg._lane*100/Math.max(seg._laneCount,1)}% + 3px);width:calc(${100/Math.max(seg._laneCount,1)}% - 6px)" title="${escapeHTML(e.title)} · ${escapeHTML(fullTime)}"><span class="event-title"><i class="event-dot"></i>${escapeHTML(e.title)}${e.done?'<span class="event-status">✓</span>':e.failed?'<span class="event-status failed-status">×</span>':''}</span><span class="event-time">${escapeHTML(label)}</span>${height>76&&e.notes?`<span class="event-note">${escapeHTML(e.notes)}</span>`:''}</button>`;
     });
-    $('calendarGrid').innerHTML=html;
-    const ev=allEventsForWeek();
-    const ws=dayStart(toISO(weekStart)).getTime(),we=dayStart(toISO(addDays(weekStart,7))).getTime();
-    const total=ev.reduce((n,e)=>{const x=eventInterval(e);return n+(Math.max(0,Math.min(x.end.getTime(),we)-Math.max(x.start.getTime(),ws))/3600000)},0);
-    const days=new Set();dates.forEach(d=>{const ds=dayStart(toISO(d)).getTime(),de=dayStart(toISO(addDays(d,1))).getTime();if(ev.some(e=>{const x=eventInterval(e);return x.start.getTime()<de&&x.end.getTime()>ds}))days.add(toISO(d));});
-    $('eventCount').textContent=ev.length;$('plannedHours').textContent=`${Number.isInteger(total)?total:total.toFixed(1)} ч`;$('freeDays').textContent=7-days.size;
+    return html+'</div>';
+  }
+  function renderWeekCalendar(hourPx){
+    const dates=getWeekDates();let html='<div class="time-head"></div>';
+    dates.forEach(d=>{const iso=toISO(d);html+=`<div class="day-head ${iso===toISO(new Date())?'today':''} ${iso===activeMobileDate?'active-mobile':''}" data-head-day="${iso}"><div class="dow">${d.toLocaleDateString('ru-RU',{weekday:'short'}).replace('.','')}</div><div class="date">${pad(d.getDate())}</div></div>`});
+    html+='<div class="time-axis">'+Array.from({length:24},(_,h)=>`<div class="time-label">${pad(h)}:00</div>`).join('')+'</div>';
+    dates.forEach(d=>{const iso=toISO(d),dayEvents=allocateLanes(state.events.map(e=>segmentsForDay(e,iso)).filter(Boolean));html+=`<div class="day-column ${iso===toISO(new Date())?'today-col':''} ${iso===activeMobileDate?'active-mobile':''}" data-column-day="${iso}">`;for(let h=0;h<24;h++)html+=`<div class="slot-hit" style="top:${h*hourPx}px" data-date="${iso}" data-hour="${h}" aria-label="Добавить дело ${h}:00"></div>`;dayEvents.forEach(seg=>{const e=seg.event,start=seg.startMin,end=seg.endMin,c=category(e.categoryId),top=start/60*hourPx,height=Math.max(25,(end-start)/60*hourPx-3),laneCount=Math.max(seg._laneCount,1),width=100/laneCount,left=seg._lane*width;let label=seg.continuesBefore?`Продолжение · 00:00 — ${time(end)}`:seg.continuesAfter?`${time(start)} — 00:00 · далее`:`${time(start)} — ${time(end)}`;const fullTime=`${fmtDateShort(e.date)} ${e.start} → ${fmtDateShort(e.endDate||e.date)} ${e.end}`;html+=`<button class="event ${e.done?'completed':e.failed?'failed':''}" data-event="${escapeHTML(e.id)}" data-segment-date="${iso}" style="--event-color:${c.color};top:${top+2}px;height:${height}px;left:calc(${left}% + 3px);width:calc(${width}% - 6px)" title="${escapeHTML(e.title)} · ${escapeHTML(fullTime)}"><span class="event-title"><i class="event-dot"></i>${escapeHTML(e.title)}${e.done?'<span class="event-status">✓</span>':e.failed?'<span class="event-status failed-status">×</span>':''}</span><span class="event-time">${escapeHTML(label)}</span>${height>76&&e.notes?`<span class="event-note">${escapeHTML(e.notes)}</span>`:''}</button>`});html+='</div>';});return html;
+  }
+  function renderMonthCalendar(){
+    const anchor=parseISO(activeMobileDate),monthStart=new Date(anchor.getFullYear(),anchor.getMonth(),1,12),gridStart=mondayOf(monthStart),today=toISO(new Date());
+    const weekdays=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];let html=weekdays.map(x=>`<div class="month-weekday">${x}</div>`).join('');
+    for(let i=0;i<42;i++){
+      const d=addDays(gridStart,i),iso=toISO(d),inMonth=d.getMonth()===monthStart.getMonth(),items=state.events.filter(e=>{const r=eventInterval(e),a=dayStart(iso),b=dayStart(toISO(addDays(d,1)));return r.start<b&&r.end>a}).sort((a,b)=>eventInterval(a).start-eventInterval(b).start);
+      const preview=items.slice(0,3).map(e=>{const c=category(e.categoryId);return `<button type="button" class="month-event ${e.done?'completed':e.failed?'failed':''}" data-event="${escapeHTML(e.id)}" data-segment-date="${iso}" style="--event-color:${c.color}" title="${escapeHTML(e.title)} · ${e.start}"><i></i><span>${escapeHTML(e.start)} ${escapeHTML(e.title)}</span></button>`}).join('');
+      html+=`<div class="month-cell ${inMonth?'':'outside-month'} ${iso===today?'today':''}" data-month-date="${iso}"><button type="button" class="month-date" data-month-date="${iso}" aria-label="Добавить дело ${iso}">${d.getDate()}</button><div class="month-events">${preview}</div>${items.length>3?`<small class="month-more">+${items.length-3} ещё</small>`:''}</div>`;
+    }
+    return html;
+  }
+  function updateViewToolbar(){
+    document.querySelectorAll('[data-calendar-view]').forEach(b=>b.classList.toggle('active',b.dataset.calendarView===calendarView));
+    const anchor=parseISO(activeMobileDate);
+    if(calendarView==='day'){$('weekTitle').textContent=anchor.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'});$('weekSubtitle').textContent='План на один день';}
+    else if(calendarView==='month'){$('weekTitle').textContent=anchor.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});$('weekSubtitle').textContent='Обзор всего месяца';}
+    else{$('weekTitle').textContent=`${fmtShort(weekStart)} — ${fmtShort(addDays(weekStart,6))}`;$('weekSubtitle').textContent=`${weekStart.getFullYear()} · план на 7 дней`;}
+    $('mobileDays').classList.toggle('hidden',calendarView!=='week');
+  }
+  function render(){
+    syncCollectionUnlocks(true);syncFormUnlocks(true);renderEconomyUI();
+    const hourPx=window.matchMedia('(max-width: 680px)').matches?58:64;
+    updateViewToolbar();
+    let html='';
+    const grid=$('calendarGrid');grid.className='calendar-grid';
+    if(calendarView==='month'){grid.classList.add('month-view');html=renderMonthCalendar();}
+    else if(calendarView==='day'){grid.classList.add('day-view');html=renderTimelineDay(parseISO(activeMobileDate),hourPx,true);}
+    else{html=renderWeekCalendar(hourPx);renderMobileDays(getWeekDates());}
+    grid.innerHTML=html;
+    const ev=eventsForCurrentView(),{start:rangeStart,end:rangeEnd}=currentViewRange();
+    const total=ev.reduce((n,e)=>{const x=eventInterval(e);return n+Math.max(0,Math.min(x.end.getTime(),rangeEnd.getTime())-Math.max(x.start.getTime(),rangeStart.getTime()))/3600000},0);
+    const activeDays=new Set();
+    const daysInScope=Math.round((rangeEnd-rangeStart)/86400000);
+    for(let d=new Date(rangeStart);d<rangeEnd;d=addDays(d,1)){const ds=dayStart(toISO(d)),de=dayStart(toISO(addDays(d,1)));if(ev.some(e=>{const x=eventInterval(e);return x.start<de&&x.end>ds}))activeDays.add(toISO(d));}
+    $('eventCount').textContent=ev.length;$('plannedHours').textContent=`${Number.isInteger(total)?total:total.toFixed(1)} ч`;$('freeDays').textContent=Math.max(0,daysInScope-activeDays.size);
     $('emptyHint').style.display=ev.length?'none':'block';
+    $('emptyHint').textContent=calendarView==='month'?'В этом месяце пока нет дел. Нажми на дату, чтобы добавить первое.':'Пока нет запланированных дел. Нажми на свободный час или «Добавить дело».';
     renderProgress();renderTasks();renderCollection();
+    updateNotificationPanel();
   }
   let autoEndDate=false;
   let lastStartDate='';
@@ -644,11 +796,13 @@
   document.querySelectorAll('[data-task-filter]').forEach(b=>b.addEventListener('click',()=>{taskFilter=b.dataset.taskFilter;renderTasks();}));
   $('deleteEventBtn').addEventListener('click',()=>{if(!editingId)return;if(confirm('Удалить это дело из расписания?')){const deleting=state.events.find(e=>e.id===editingId);if(deleting)revokeTaskCoins(deleting);state.events=state.events.filter(e=>e.id!==editingId);save();closeModal('eventModal');render();toast('Дело удалено');editingId=null;}});
   $('addBtn').addEventListener('click',()=>openEventModal(activeMobileDate));
-  $('calendarGrid').addEventListener('click',e=>{const eventBtn=e.target.closest('[data-event]');if(eventBtn){const item=state.events.find(x=>x.id===eventBtn.dataset.event);if(item){activeMobileDate=eventBtn.dataset.segmentDate||item.date;openEventModal(item.date,undefined,item);}return;}const slot=e.target.closest('[data-date]');if(slot){openEventModal(slot.dataset.date,Number(slot.dataset.hour));}});
+  $('calendarGrid').addEventListener('click',e=>{const eventBtn=e.target.closest('[data-event]');if(eventBtn){const item=state.events.find(x=>x.id===eventBtn.dataset.event);if(item){activeMobileDate=eventBtn.dataset.segmentDate||item.date;openEventModal(item.date,undefined,item);}return;}const slot=e.target.closest('[data-date]');if(slot){openEventModal(slot.dataset.date,Number(slot.dataset.hour));return;}const monthCell=e.target.closest('[data-month-date]');if(monthCell){const iso=monthCell.dataset.monthDate;activeMobileDate=iso;openEventModal(iso);}});
   $('mobileDays').addEventListener('click',e=>{const b=e.target.closest('[data-day]');if(!b)return;activeMobileDate=b.dataset.day;render();});
-  $('prevWeek').addEventListener('click',()=>{weekStart=addDays(weekStart,-7);activeMobileDate=toISO(weekStart);render()});
-  $('nextWeek').addEventListener('click',()=>{weekStart=addDays(weekStart,7);activeMobileDate=toISO(weekStart);render()});
-  $('todayBtn').addEventListener('click',()=>{weekStart=mondayOf(new Date());activeMobileDate=toISO(new Date());render()});
+  function moveCalendarPeriod(direction){if(calendarView==='day'){activeMobileDate=toISO(addDays(parseISO(activeMobileDate),direction));weekStart=mondayOf(parseISO(activeMobileDate));}else if(calendarView==='month'){const d=parseISO(activeMobileDate);d.setDate(1);d.setMonth(d.getMonth()+direction);activeMobileDate=toISO(d);weekStart=mondayOf(d);}else{weekStart=addDays(weekStart,direction*7);activeMobileDate=toISO(weekStart);}render();}
+  $('prevWeek').addEventListener('click',()=>moveCalendarPeriod(-1));
+  $('nextWeek').addEventListener('click',()=>moveCalendarPeriod(1));
+  $('todayBtn').addEventListener('click',()=>{activeMobileDate=toISO(new Date());weekStart=mondayOf(new Date());render()});
+  document.querySelectorAll('[data-calendar-view]').forEach(b=>b.addEventListener('click',()=>{calendarView=b.dataset.calendarView;if(calendarView==='week')weekStart=mondayOf(parseISO(activeMobileDate));render();}));
   $('manageCatsBtn').addEventListener('click',()=>{$('categoryModal').classList.add('open');renderCategories()});
   $('addCategoryBtn').addEventListener('click',()=>{const name=$('newCategoryName').value.trim();if(!name){toast('Введи название категории');return;}if(state.categories.some(c=>c.name.toLowerCase()===name.toLowerCase())){toast('Такая категория уже есть');return;}state.categories.push({id:uid(),name,color:$('newCategoryColor').value,xp:0});$('newCategoryName').value='';save();renderCategories();render();toast('Категория добавлена');});
   $('categoryList').addEventListener('change',e=>{
@@ -696,11 +850,11 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-backdrop.open').forEach(m=>closeModal(m.id));});
   $('exportBtn').addEventListener('click',()=>{const blob=new Blob([JSON.stringify({...state,appVersion:7},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fristik-planner-backup.json';a.click();URL.revokeObjectURL(a.href);toast('Резервная копия скачана');});
   $('importBtn').addEventListener('click',()=>$('importFile').click());
-  $('importFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!Array.isArray(x.events)||!Array.isArray(x.categories))throw new Error();if(!confirm('Импорт заменит текущее расписание и категории. Продолжить?'))return;state={events:x.events.map(ev=>({...ev,done:!!ev.done,failed:!!ev.failed&&!ev.done,earnedXP:(!ev.done||NO_XP_CATS.has(ev.categoryId))?0:(Number(ev.earnedXP)||0),penaltyXP:(ev.failed&&!NO_XP_CATS.has(ev.categoryId))?(Number(ev.penaltyXP)||taskPenalty({xp:Number(x.categories.find(c=>c.id===ev.categoryId)?.xp)||0})):0,penaltyApplied:ev.failed?Math.max(0,Number(ev.penaltyApplied)||0):0,completedAt:ev.done?(ev.completedAt||null):null,failedAt:ev.failed&&!ev.done?(ev.failedAt||null):null})),categories:DEFAULT_CATS.map(base=>({...base,...(x.categories.find(c=>c.id===base.id)||{}),xp:NO_XP_CATS.has(base.id)?0:Number(x.categories.find(c=>c.id===base.id)?.xp??base.xp)})).concat(x.categories.filter(c=>!DEFAULT_CATS.some(d=>d.id===c.id)).map(c=>({...c,xp:Math.max(0,Number(c.xp??0))}))),settings:{dailyGoal:2,weeklyGoal:10,...(x.settings||{})},collection:{unlocked:Array.isArray(x.collection?.unlocked)?x.collection.unlocked:[],active:x.collection?.active||'goku',initialized:false,...(x.collection||{})}};if(!Array.isArray(state.collection.unlocked))state.collection.unlocked=[];state.collection.initialized=true;state.collection.formsUnlocked=Array.isArray(state.collection.formsUnlocked)?state.collection.formsUnlocked:[];state.collection.activeForms=state.collection.activeForms&&typeof state.collection.activeForms==='object'?state.collection.activeForms:{};state.economy={coins:0,shards:0,ownedCards:{},ownedItems:[],equippedItems:{},totalCasesOpened:0,epicPity:0,ledger:[],...(x.economy||{})};state.economy.coins=Math.max(0,Number(state.economy.coins)||0);state.economy.shards=Math.max(0,Number(state.economy.shards)||0);state.economy.ownedCards=state.economy.ownedCards||{};state.economy.ownedItems=Array.isArray(state.economy.ownedItems)?state.economy.ownedItems:[];state.economy.equippedItems=state.economy.equippedItems||{};state.economy.ledger=Array.isArray(state.economy.ledger)?state.economy.ledger:[];syncCollectionUnlocks(false);syncFormUnlocks(false);save();renderCategories();render();toast('Данные импортированы');}catch(err){toast('Не удалось прочитать файл резервной копии');}e.target.value='';});
+  $('importFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!Array.isArray(x.events)||!Array.isArray(x.categories))throw new Error();if(!confirm('Импорт заменит текущее расписание и категории. Продолжить?'))return;state={events:x.events.map(ev=>({...ev,done:!!ev.done,failed:!!ev.failed&&!ev.done,earnedXP:(!ev.done||NO_XP_CATS.has(ev.categoryId))?0:(Number(ev.earnedXP)||0),penaltyXP:(ev.failed&&!NO_XP_CATS.has(ev.categoryId))?(Number(ev.penaltyXP)||taskPenalty({xp:Number(x.categories.find(c=>c.id===ev.categoryId)?.xp)||0})):0,penaltyApplied:ev.failed?Math.max(0,Number(ev.penaltyApplied)||0):0,completedAt:ev.done?(ev.completedAt||null):null,failedAt:ev.failed&&!ev.done?(ev.failedAt||null):null})),categories:DEFAULT_CATS.map(base=>({...base,...(x.categories.find(c=>c.id===base.id)||{}),xp:NO_XP_CATS.has(base.id)?0:Number(x.categories.find(c=>c.id===base.id)?.xp??base.xp)})).concat(x.categories.filter(c=>!DEFAULT_CATS.some(d=>d.id===c.id)).map(c=>({...c,xp:Math.max(0,Number(c.xp??0))}))),settings:{dailyGoal:2,weeklyGoal:10,...(x.settings||{})},collection:{unlocked:Array.isArray(x.collection?.unlocked)?x.collection.unlocked:[],active:x.collection?.active||'goku',initialized:false,...(x.collection||{})}};if(!Array.isArray(state.collection.unlocked))state.collection.unlocked=[];state.collection.initialized=true;state.collection.formsUnlocked=Array.isArray(state.collection.formsUnlocked)?state.collection.formsUnlocked:[];state.collection.activeForms=state.collection.activeForms&&typeof state.collection.activeForms==='object'?state.collection.activeForms:{};state.economy={coins:0,shards:0,ownedCards:{},ownedItems:[],equippedItems:{},totalCasesOpened:0,epicPity:0,ledger:[],...(x.economy||{})};state.economy.coins=Math.max(0,Number(state.economy.coins)||0);state.economy.shards=Math.max(0,Number(state.economy.shards)||0);state.economy.ownedCards=state.economy.ownedCards||{};state.economy.ownedItems=Array.isArray(state.economy.ownedItems)?state.economy.ownedItems:[];state.economy.equippedItems=state.economy.equippedItems||{};state.economy.ledger=Array.isArray(state.economy.ledger)?state.economy.ledger:[];state.notifications={enabled:false,leadMinutes:5,lastNotified:[],...(x.notifications||{})};state.notifications.lastNotified=Array.isArray(state.notifications.lastNotified)?state.notifications.lastNotified:[];state.game={bestScore:0,rewardDate:'',totalPlays:0,lastScore:0,...(x.game||{})};syncCollectionUnlocks(false);syncFormUnlocks(false);save();renderCategories();render();toast('Данные импортированы');}catch(err){toast('Не удалось прочитать файл резервной копии');}e.target.value='';});
   // Reflow the timeline after device rotation or a responsive breakpoint change.
   window.addEventListener('resize',()=>render());
   // Seed a clean category selector and initial schedule.
   if(!state.collection.initialized){syncCollectionUnlocks(false);state.collection.initialized=true;}else{syncCollectionUnlocks(false);}
-  syncFormUnlocks(false);renderCategories();renderQuote();render();renderStats();renderCollection();renderShop();updateWalletUI();save();document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page==='schedule'));
+  syncFormUnlocks(false);renderCategories();renderQuote();render();renderStats();renderCollection();renderShop();updateWalletUI();renderGameInfo();initMiniGame();initNotifications();registerAppServiceWorker();save();document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page==='schedule'));
   try { const probe='__ritm_storage_test__';localStorage.setItem(probe,'1');localStorage.removeItem(probe); } catch(err) { const status=$('saveStateText');if(status)status.textContent='Браузер блокирует автосохранение — используй экспорт резервной копии'; }
 })();
